@@ -14,8 +14,8 @@ const RESOURCES_ROOT: &'static str = "/home/pi/Desktop/ethan_ws/resources";
 const LOG_FILE_PATH: &'static str = "/home/pi/Desktop/server_log.txt";
 
 // hard-coded error messages
-const ERROR_404_RESPONSE: &'static [u8] = br#"HTTP/1.1 404 Not Found\r\n\r\n<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>ethan.ws</title></head><body><h1>404 - Page Not Found</h1></body></html>"#;
-const ERROR_500_RESPONSE: &'static [u8] = br#"HTTP/1.1 500 Internal Server Error\r\n\r\n<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>ethan.ws</title></head><body><h1>500 - Internal Server Error</h1></body></html>"#;
+const ERROR_404_RESPONSE: &'static [u8] = b"HTTP/1.1 404 Page Not Found\r\n\r\n<!DOCTYPE html><html lang='en-US'><head><meta charset='UTF-8'><title>ethan.ws</title></head><body><h1>Error 404 - Page Not Found</h1></body></html>";
+const ERROR_500_RESPONSE: &'static [u8] = b"HTTP/1.1 500 Internal Server Error\r\n\r\n<!DOCTYPE html><html lang='en-US'><head><meta charset='UTF-8'><title>ethan.ws</title></head><body><h1>Error 500 - Internal Server Error</h1></body></html>";
 
 lazy_static! {
     static ref RESOURCE_IDENTIFIER: bytes::Regex = bytes::Regex::new(r#"^GET (\S*)"#).unwrap();
@@ -32,18 +32,6 @@ fn main() -> io::Result<()> {
     writeln!(log_file, "{}\tsession ended with error: {:?}", time_string(), result).unwrap();
 
     result
-}
-
-fn get_resource_title(request: &[u8]) -> Result<String, ServerError> {
-    match bytes::Regex::captures(&RESOURCE_IDENTIFIER, &request) {
-        Some(captures) => {
-            match String::from_utf8(captures[1].to_vec()) {
-                Ok(resource_title) => Ok(resource_title),
-                Err(_) => Err(ServerError::MalformedRequest),
-            }
-        }
-        None => Err(ServerError::MalformedRequest),
-    }
 }
 
 fn start_server(log_file: &mut File) -> io::Result<()> {
@@ -74,10 +62,10 @@ fn handle_client(mut stream: TcpStream, response_index: usize, log_file: &mut Fi
     match get_data(&resource_title) {
         Ok(data) => {
             write!(stream, "HTTP/1.1 200 OK\r\n\r\n")?;
-            stream.write(&data)?
+            stream.write_all(&data)?
         },
-        Err(ServerError::ResourceNotFound) => stream.write(ERROR_404_RESPONSE)?,
-        Err(_) => stream.write(ERROR_500_RESPONSE)?,
+        Err(ServerError::ResourceNotFound) => stream.write_all(ERROR_404_RESPONSE)?,
+        Err(_) => stream.write_all(ERROR_500_RESPONSE)?,
     };
 
     stream.flush()?;
@@ -85,7 +73,17 @@ fn handle_client(mut stream: TcpStream, response_index: usize, log_file: &mut Fi
     Ok(())
 }
 
-
+fn get_resource_title(request: &[u8]) -> Result<String, ServerError> {
+    match bytes::Regex::captures(&RESOURCE_IDENTIFIER, &request) {
+        Some(captures) => {
+            match String::from_utf8(captures[1].to_vec()) {
+                Ok(resource_title) => Ok(resource_title),
+                Err(_) => Err(ServerError::MalformedRequest),
+            }
+        },
+        None => Err(ServerError::MalformedRequest),
+    }
+}
 
 fn get_data(request: &str) -> Result<Vec<u8>, ServerError> {
     let request =
@@ -114,7 +112,6 @@ fn get_data(request: &str) -> Result<Vec<u8>, ServerError> {
 
 fn is_to_resources_folder(path: &PathBuf) -> bool {
     // make sure request doesn't look like /../../../Desktop/secrets.txt or something
-
     path.ancestors().any(|a| a == Path::new(RESOURCES_ROOT))
 }
 
