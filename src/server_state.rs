@@ -3,8 +3,9 @@ use crate::frame::{Frame, FrameType};
 use crate::tcp_halves::TcpWriter;
 use crate::http_request_parse::HttpRequest;
 use crate::base64::to_base64;
+use sha1::Sha1;
+use crate::http_handler::get_response_to_http;
 
-const ERROR_404_RESPONSE: &'static [u8] = b"HTTP/1.1 404 Page Not Found\r\n\r\n<!DOCTYPE html><html lang='en-US'><head><meta charset='UTF-8'><title>ethan.ws</title></head><body><h1>Error 404 - Page Not Found</h1></body></html>";
 const WEBSOCKET_SECURE_KEY_MAGIC_NUMBER: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 
@@ -54,13 +55,13 @@ impl ServerState {
     pub fn http_message_handler(&mut self, client: ClientId, message: HttpRequest) -> ReaderResponseToHttp {
         // returns true if should upgrade to websocket connection
         match self.get_writer(client) {
-            Some(writer) => match handle_deelio(message) {
+            Some(writer) => match handle_deelio(&message) {
                 Some(websocket_upgrade_response) => match writer.write_all(websocket_upgrade_response.as_bytes()) {
                     Ok(_) => ReaderResponseToHttp::UpgradeToWebsocket,
                     Err(_) => ReaderResponseToHttp::Drop,
                 },
                 None => {
-                    let _ = writer.write_all(ERROR_404_RESPONSE); // we dont really care
+                    let _ = get_response_to_http(&message, writer);
                     ReaderResponseToHttp::Drop
                 },
             },
@@ -112,14 +113,13 @@ pub enum ReaderResponseToHttp {
     Drop,
 }
 
-fn handle_deelio(request: HttpRequest) -> Option<String> {
+fn handle_deelio(request: &HttpRequest) -> Option<String> {
     if request.get_header_value("Upgrade") == Some("websocket") {
         match request.get_header_value("Sec-WebSocket-Key") {
             Some(key) => {
                 if !key.is_ascii() { return None };
                 let to_hash = format!("{}{}", key, WEBSOCKET_SECURE_KEY_MAGIC_NUMBER);
-                let result = sha1::Sha1::from(to_hash.as_bytes()).digest().bytes();
-                let response = to_base64(&result);
+                let response = to_base64(&Sha1::from(to_hash.as_bytes()).digest().bytes());
                 let r = format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\nSec-WebSocket-Protocol: chat\r\n\r\n", response);
                 Some(r)
             },
