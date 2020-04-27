@@ -1,22 +1,91 @@
-use std::io::Write;
+use std::io::{Write, BufReader, BufRead};
 use crate::frame::{Frame, FrameType};
 use crate::tcp_halves::TcpWriter;
 use crate::http_request_parse::HttpRequest;
 use crate::base64::to_base64;
 use sha1::Sha1;
 use crate::http_handler::get_response_to_http;
+use std::ops::{RangeInclusive};
+// use std::option::NoneError;
 
 const WEBSOCKET_SECURE_KEY_MAGIC_NUMBER: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+// const RESOURCES_ROOT: &'static str = "";
+
+
+// TODO: add SPICE
+struct GodSet {
+    inner: Vec<(String, String, RangeInclusive<u16>)>,
+}
+
+impl GodSet {
+    fn new() -> GodSet {
+        // todo: make this tiype return option
+        match GodSet::get_vec() {
+            Some(inner) => GodSet { inner },
+            None => GodSet { inner: Vec::new() }
+        }
+    }
+
+    fn get_vec() -> Option<Vec<(String, String, RangeInclusive<u16>)>> {
+        let file = BufReader::new(std::fs::File::open("/home/pi/Desktop/server/resources/godset.txt").ok()?);
+
+        file.lines()
+            .map(|line| {
+                let line = line.ok()?;
+                let mut split = line.trim_end().split("\t");
+                let year_start: u16 = split.next()?.parse().ok()?;
+                let year_end: u16 = split.next()?.parse().ok()?;
+                let term = split.next()?.to_string();
+                let definition = split.next()?.to_string();
+                Some((term, definition, year_start..=year_end))
+            })
+            .collect()
+    }
+
+    fn search(&self, keyword: Option<&str>, search_range: Option<RangeInclusive<u16>>) -> Vec<(String, String)> {
+        self.inner.iter()
+            .filter(|&(ref term, ref def, range)| {
+                let text_contains = match keyword {
+                    Some(keyword) => term.contains(keyword) || def.contains(keyword),
+                    None => true,
+                };
+                let range_contains = match search_range {
+                    Some(ref search_range) => search_range.contains(range.start()) || search_range.contains(range.end()),
+                    None => true,
+                };
+                text_contains && range_contains
+            })
+            .map(|(term, def, _)| (term.to_string(), def.to_string()))
+            .collect()
+    }
+
+    pub fn parse_request(&self, s: &str) -> Option<Vec<(String, String)>> {
+        let split: Vec<String> = s.split("|").map(|s| s.to_string()).collect();
+        let keyword = split.get(0)?;
+        let start_range = split.get(1)?;
+        let end_range = split.get(2)?;
+
+        Some(self.search(
+            if keyword.is_empty() { None } else { Some(keyword) },
+            if start_range.is_empty() || end_range.is_empty()
+            { None } else {
+                Some(start_range.parse().ok()?..=end_range.parse().ok()?)
+            }
+        ))
+    }
+}
 
 
 pub struct ServerState {
     clients: Vec<Client>,
     id_generator: ClientIdGenerator,
+    god_set: GodSet,
 }
 
 impl ServerState {
     pub fn new() -> ServerState {
-        ServerState { clients: Vec::new(), id_generator: ClientIdGenerator::new() }
+        ServerState { clients: Vec::new(), id_generator: ClientIdGenerator::new(), god_set: GodSet::new() }
     }
 
     pub fn new_connection_handler(&mut self, stream: TcpWriter) -> ClientId {
@@ -38,14 +107,22 @@ impl ServerState {
 
 
     pub fn websocket_message_handler(&mut self, client: ClientId, message: Vec<u8>) {
-        println!("client #{:?} sent `{}`", client, String::from_utf8_lossy(&message));
+        let message = String::from_utf8_lossy(&message);
+        println!("client #{:?} sent `{}`", client, message);
+
+        let result = match self.god_set.parse_request(&message) {
+            Some(ok) => ok,
+            None => Vec::new(),
+        };
+
+        let response = if result.is_empty() {
+            b"Couldn't find match".to_vec()
+        } else {
+            result.iter().map(|(key, term)| format!("{}: {}\n\n", key, term)).collect::<String>().as_bytes().to_vec()
+        };
 
         match self.get_writer(client) {
             Some(writer) => {
-                let mut response = Vec::new();
-                response.extend_from_slice(b"I dont have a response to: `");
-                response.extend_from_slice(&message);
-                response.extend_from_slice(b"`. sorry!");
                 let _ = writer.write_all(&Frame::from_payload(FrameType::Text, response).encode());
             },
             None => {},
@@ -77,6 +154,7 @@ impl ServerState {
     fn get_writer(&mut self, id: ClientId) -> Option<&mut TcpWriter> {
         self.get_client_mut(id).map(|c| &mut c.writer)
     }
+
 }
 
 
@@ -120,8 +198,8 @@ fn handle_deelio(request: &HttpRequest) -> Option<String> {
                 if !key.is_ascii() { return None };
                 let to_hash = format!("{}{}", key, WEBSOCKET_SECURE_KEY_MAGIC_NUMBER);
                 let response = to_base64(&Sha1::from(to_hash.as_bytes()).digest().bytes());
-                let r = format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\nSec-WebSocket-Protocol: chat\r\n\r\n", response);
-                Some(r)
+                // NOTE: excludes header: nSec-WebSocket-Protocol: chat
+                Some(format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n", response))
             },
             None => None,
         }
