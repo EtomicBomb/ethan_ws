@@ -11,7 +11,17 @@ struct HttpRequestParser;
 pub struct HttpRequest {
     request_type: RequestType,
     resource_location: String,
-    pub headers: HashMap<String, String>,
+    headers: HashMap<String, String>,
+}
+
+impl HttpRequest {
+    pub fn resource_location(&self) -> &str {
+        &self.resource_location
+    }
+
+    pub fn get_header_value(&self, name: &str) -> Option<&str> {
+        self.headers.get(name).map(String::as_str)
+    }
 }
 
 impl FromStr for HttpRequest {

@@ -1,19 +1,14 @@
 extern crate chrono;
 use chrono::{Local};
-
 #[macro_use]
 extern crate pest_derive;
-
-
-use lazy_static::lazy_static;
-
-use regex::bytes;
 
 use std::net::{TcpListener, TcpStream};
 use std::io::{self, Read, Write};
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
-
+use std::str::FromStr;
+use crate::http_request_parse::HttpRequest;
 
 mod base64;
 mod frame;
@@ -29,9 +24,6 @@ const LOG_FILE_PATH: &'static str = "/home/pi/Desktop/server_log.txt";
 const ERROR_404_RESPONSE: &'static [u8] = b"HTTP/1.1 404 Page Not Found\r\n\r\n<!DOCTYPE html><html lang='en-US'><head><meta charset='UTF-8'><title>ethan.ws</title></head><body><h1>Error 404 - Page Not Found</h1></body></html>";
 const ERROR_500_RESPONSE: &'static [u8] = b"HTTP/1.1 500 Internal Server Error\r\n\r\n<!DOCTYPE html><html lang='en-US'><head><meta charset='UTF-8'><title>ethan.ws</title></head><body><h1>Error 500 - Internal Server Error</h1></body></html>";
 
-lazy_static! {
-    static ref RESOURCE_IDENTIFIER: bytes::Regex = bytes::Regex::new(r#"^GET (\S*)"#).unwrap();
-}
 
 fn main() -> io::Result<()> {
     let mut log_file = OpenOptions::new()
@@ -66,10 +58,14 @@ fn handle_client(mut stream: TcpStream, response_index: usize, log_file: &mut Fi
     writeln!(log_file, "{}\t {}", time_string(), stream.peer_addr()?)?;
 
     let mut buf = [0u8; 512];
-    stream.read(&mut buf)?;
+    let bytes_rxed = stream.read(&mut buf)?;
 
     // parse our request for what resource they were requesting
-    let resource_title = get_resource_title(&buf)?;
+    let resource_title = match HttpRequest::from_str(&String::from_utf8_lossy(&buf[0..bytes_rxed])) {
+        Ok(name) => name.resource_location().to_string(),
+        Err(e) => return Err(ServerError::MalformedRequest),
+    };
+
 
     match get_data(&resource_title) {
         Ok(data) => {
@@ -83,18 +79,6 @@ fn handle_client(mut stream: TcpStream, response_index: usize, log_file: &mut Fi
     stream.flush()?;
 
     Ok(())
-}
-
-fn get_resource_title(request: &[u8]) -> Result<String, ServerError> {
-    match bytes::Regex::captures(&RESOURCE_IDENTIFIER, &request) {
-        Some(captures) => {
-            match String::from_utf8(captures[1].to_vec()) {
-                Ok(resource_title) => Ok(resource_title),
-                Err(_) => Err(ServerError::MalformedRequest),
-            }
-        },
-        None => Err(ServerError::MalformedRequest),
-    }
 }
 
 fn get_data(request: &str) -> Result<Vec<u8>, ServerError> {

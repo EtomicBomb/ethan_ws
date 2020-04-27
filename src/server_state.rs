@@ -113,8 +113,8 @@ pub enum ReaderResponseToHttp {
 }
 
 fn handle_deelio(request: HttpRequest) -> Option<String> {
-    if request.headers.get("Upgrade").map(String::as_str) == Some("websocket") {
-        match request.headers.get("Sec-WebSocket-Key") {
+    if request.get_header_value("Upgrade") == Some("websocket") {
+        match request.get_header_value("Sec-WebSocket-Key") {
             Some(key) => {
                 if !key.is_ascii() { return None };
                 let to_hash = format!("{}{}", key, WEBSOCKET_SECURE_KEY_MAGIC_NUMBER);
