@@ -1,0 +1,28 @@
+TOP = { SOI ~ protocol ~ " " ~ resource_location ~ " HTTP/1.1\r\n" ~ headers ~ "\r\n" ~  EOI }
+
+protocol = {
+    "GET" |
+    "HEAD" |
+    "POST" |
+    "PUT" |
+    "DELETE" |
+    "TRACE" |
+    "OPTIONS" |
+    "CONNECT" |
+    "PATCH"
+}
+
+resource_location = { not_whitespace* }
+
+headers = _{
+    (header ~ "\r\n" ~ headers) |
+    ""
+}
+
+header = { header_name ~ ": " ~ header_value }
+
+header_name = { ('a'..'z' | "-" | 'A'..'Z')* }
+header_value = { not_newline* }
+
+not_whitespace = { '\x21'..'\x7E' }
+not_newline = { '\x20'..'\x7E' }

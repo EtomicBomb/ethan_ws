@@ -1,6 +1,10 @@
 extern crate chrono;
 use chrono::{Local};
 
+#[macro_use]
+extern crate pest_derive;
+
+
 use lazy_static::lazy_static;
 
 use regex::bytes;
@@ -9,6 +13,14 @@ use std::net::{TcpListener, TcpStream};
 use std::io::{self, Read, Write};
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
+
+
+mod base64;
+mod frame;
+mod frame_stream;
+mod http_request_parse;
+mod server_state;
+mod tcp_halves;
 
 const RESOURCES_ROOT: &'static str = "/home/pi/Desktop/ethan_ws/resources";
 const LOG_FILE_PATH: &'static str = "/home/pi/Desktop/server_log.txt";
