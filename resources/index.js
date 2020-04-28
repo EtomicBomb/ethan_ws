@@ -4,14 +4,14 @@ canvas.font = '50px serif';
 var width = 500;
 var height = 500;
 
-var blockWidth = 20;
-var blockHeight = 20;
+var blockWidth = 50;
+var blockHeight = 50;
 
-var x = 100;
-var y = 100;
+var x = width*Math.random();
+var y = height*Math.random();
 
 var vx = 3;
-var vy = 5;
+var vy = 3.1;
 
 setInterval(function() {
     x += vx;

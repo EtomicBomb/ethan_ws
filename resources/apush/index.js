@@ -17,7 +17,10 @@ socket.onclose = function(r) {
 function clickHandler() {
     var response = document.getElementById("keywordInput").value
         + "|" + document.getElementById("yearRangeMin").value
-        + "|" + document.getElementById("yearRangeMax").value;
+        + "|" + document.getElementById("yearRangeMax").value
+        + "|" + document.getElementById("socialChecked").checked
+        + "|" + document.getElementById("politicalChecked").checked
+        + "|" + document.getElementById("economicChecked").checked;
 
     console.log(response);
 

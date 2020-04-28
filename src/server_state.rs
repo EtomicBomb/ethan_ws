@@ -6,16 +6,12 @@ use crate::base64::to_base64;
 use sha1::Sha1;
 use crate::http_handler::get_response_to_http;
 use std::ops::{RangeInclusive};
-// use std::option::NoneError;
 
 const WEBSOCKET_SECURE_KEY_MAGIC_NUMBER: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-// const RESOURCES_ROOT: &'static str = "";
-
-
 // TODO: add SPICE
 struct GodSet {
-    inner: Vec<(String, String, RangeInclusive<u16>)>,
+    inner: Vec<(String, String, RangeInclusive<u16>, bool, bool, bool)>,
 }
 
 impl GodSet {
@@ -27,8 +23,8 @@ impl GodSet {
         }
     }
 
-    fn get_vec() -> Option<Vec<(String, String, RangeInclusive<u16>)>> {
-        let file = BufReader::new(std::fs::File::open("/home/pi/Desktop/server/resources/godset.txt").ok()?);
+    fn get_vec() -> Option<Vec<(String, String, RangeInclusive<u16>, bool, bool, bool)>> {
+        let file = BufReader::new(std::fs::File::open("/home/pi/Desktop/server/resources/apush/godset.txt").ok()?);
 
         file.lines()
             .map(|line| {
@@ -36,16 +32,19 @@ impl GodSet {
                 let mut split = line.trim_end().split("\t");
                 let year_start: u16 = split.next()?.parse().ok()?;
                 let year_end: u16 = split.next()?.parse().ok()?;
+                let social: bool = split.next()?.parse().ok()?;
+                let political: bool = split.next()?.parse().ok()?;
+                let economic: bool = split.next()?.parse().ok()?;
                 let term = split.next()?.to_string();
                 let definition = split.next()?.to_string();
-                Some((term, definition, year_start..=year_end))
+                Some((term, definition, year_start..=year_end, social, political, economic))
             })
             .collect()
     }
 
-    fn search(&self, keyword: Option<&str>, search_range: Option<RangeInclusive<u16>>) -> Vec<(String, String)> {
+    fn search(&self, keyword: Option<&str>, search_range: Option<RangeInclusive<u16>>, search_s: bool, search_p: bool, search_e: bool) -> Vec<(String, String)> {
         self.inner.iter()
-            .filter(|&(ref term, ref def, range)| {
+            .filter(|&&(ref term, ref def, ref range, s, p, e)| {
                 let text_contains = match keyword {
                     Some(keyword) => term.contains(keyword) || def.contains(keyword),
                     None => true,
@@ -54,9 +53,12 @@ impl GodSet {
                     Some(ref search_range) => search_range.contains(range.start()) || search_range.contains(range.end()),
                     None => true,
                 };
-                text_contains && range_contains
+
+                let themes_match = (search_s || !s) && (search_p || !p) && (search_e || !e);
+
+                text_contains && range_contains && themes_match
             })
-            .map(|(term, def, _)| (term.to_string(), def.to_string()))
+            .map(|(term, def, _, _, _, _)| (term.to_string(), def.to_string()))
             .collect()
     }
 
@@ -65,13 +67,17 @@ impl GodSet {
         let keyword = split.get(0)?;
         let start_range = split.get(1)?;
         let end_range = split.get(2)?;
+        let society_and_culture: bool = split.get(3)?.parse().ok()?;
+        let politics: bool = split.get(4)?.parse().ok()?;
+        let economy: bool = split.get(5)?.parse().ok()?;
 
         Some(self.search(
             if keyword.is_empty() { None } else { Some(keyword) },
             if start_range.is_empty() || end_range.is_empty()
             { None } else {
                 Some(start_range.parse().ok()?..=end_range.parse().ok()?)
-            }
+            },
+            society_and_culture, politics, economy
         ))
     }
 }
@@ -89,8 +95,6 @@ impl ServerState {
     }
 
     pub fn new_connection_handler(&mut self, stream: TcpWriter) -> ClientId {
-        // spin up a thread locked on listening
-
         let id = self.id_generator.next();
 
         println!("new connection: {:?}", id);

@@ -3,6 +3,10 @@ p {
   color: red;
 }
 
+a {
+    display: block;
+}
+
 canvas {
   border: solid;
 }
