@@ -1,89 +1,16 @@
-use std::io::{Write, BufReader, BufRead};
+use sha1::Sha1;
+
+use std::io::{Write};
+
 use crate::frame::{Frame, FrameKind};
 use crate::tcp_halves::TcpWriter;
 use crate::http_request_parse::HttpRequest;
 use crate::base64::to_base64;
-use sha1::Sha1;
 use crate::http_handler::get_response_to_http;
-use std::ops::{RangeInclusive};
 use crate::log;
-use std::string::FromUtf8Error;
+use crate::god_set::GodSet;
 
 const WEBSOCKET_SECURE_KEY_MAGIC_NUMBER: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-
-// TODO: add SPICE
-struct GodSet {
-    inner: Vec<(String, String, RangeInclusive<u16>, bool, bool, bool)>,
-}
-
-impl GodSet {
-    fn new() -> GodSet {
-        // todo: make this tiype return option
-        match GodSet::get_vec() {
-            Some(inner) => GodSet { inner },
-            None => GodSet { inner: Vec::new() }
-        }
-    }
-
-    fn get_vec() -> Option<Vec<(String, String, RangeInclusive<u16>, bool, bool, bool)>> {
-        let file = BufReader::new(std::fs::File::open("/home/pi/Desktop/server/resources/apush/godset.txt").ok()?);
-
-        file.lines()
-            .map(|line| {
-                let line = line.ok()?;
-                let mut split = line.trim_end().split("\t");
-                let year_start: u16 = split.next()?.parse().ok()?;
-                let year_end: u16 = split.next()?.parse().ok()?;
-                let social: bool = split.next()?.parse().ok()?;
-                let political: bool = split.next()?.parse().ok()?;
-                let economic: bool = split.next()?.parse().ok()?;
-                let term = split.next()?.to_string();
-                let definition = split.next()?.to_string();
-                Some((term, definition, year_start..=year_end, social, political, economic))
-            })
-            .collect()
-    }
-
-    fn search(&self, keyword: Option<&str>, search_range: Option<RangeInclusive<u16>>, search_s: bool, search_p: bool, search_e: bool) -> Vec<(String, String)> {
-        self.inner.iter()
-            .filter(|&&(ref term, ref def, ref range, s, p, e)| {
-                let text_contains = match keyword {
-                    Some(keyword) => term.contains(keyword) || def.contains(keyword),
-                    None => true,
-                };
-                let range_contains = match search_range {
-                    Some(ref search_range) => search_range.contains(range.start()) || search_range.contains(range.end()),
-                    None => true,
-                };
-
-                let themes_match = (search_s || !s) && (search_p || !p) && (search_e || !e);
-
-                text_contains && range_contains && themes_match
-            })
-            .map(|(term, def, _, _, _, _)| (term.to_string(), def.to_string()))
-            .collect()
-    }
-
-    pub fn parse_request(&self, s: &str) -> Option<Vec<(String, String)>> {
-        let split: Vec<String> = s.split("|").map(|s| s.to_string()).collect();
-        let keyword = split.get(0)?;
-        let start_range = split.get(1)?;
-        let end_range = split.get(2)?;
-        let society_and_culture: bool = split.get(3)?.parse().ok()?;
-        let politics: bool = split.get(4)?.parse().ok()?;
-        let economy: bool = split.get(5)?.parse().ok()?;
-
-        Some(self.search(
-            if keyword.is_empty() { None } else { Some(keyword) },
-            if start_range.is_empty() || end_range.is_empty()
-            { None } else {
-                Some(start_range.parse().ok()?..=end_range.parse().ok()?)
-            },
-            society_and_culture, politics, economy
-        ))
-    }
-}
-
 
 pub struct ServerState {
     clients: Vec<Client>,
@@ -93,7 +20,13 @@ pub struct ServerState {
 
 impl ServerState {
     pub fn new() -> ServerState {
-        ServerState { clients: Vec::new(), id_generator: ClientIdGenerator::new(), god_set: GodSet::new() }
+        match GodSet::new() {
+            Some(god_set) => ServerState { clients: Vec::new(), id_generator: ClientIdGenerator::new(), god_set },
+            None => {
+                log!("Couldn't parse godset file");
+                panic!();
+            }
+        }
     }
 
     pub fn new_connection_handler(&mut self, stream: TcpWriter) -> ClientId {
@@ -111,43 +44,48 @@ impl ServerState {
 
     pub fn drop_handler(&mut self, id: ClientId) {
         log!("dropped connection to #{}", id.0);
-        let (i, _) = self.clients.iter().enumerate().find(|(_, c)| c.id == id).unwrap();
-        self.clients.remove(i);
-    }
 
-    pub fn websocket_message_handler(&mut self, client: ClientId, message_bytes: Vec<u8>, kind: FrameKind) -> StreamState {
-        if kind != FrameKind::Text { return StreamState::Drop }
-
-        let message = String::from_utf8_lossy(&message_bytes);
-
-        log!("client #{} made a WebSocket request: {}", client.0, message);
-
-        let result = match self.god_set.parse_request(&message) {
-            Some(ok) => ok,
-            None => Vec::new(),
-        };
-
-        let response = if result.is_empty() {
-            b"Couldn't find match".to_vec()
-        } else {
-            result.iter().map(|(key, term)| format!("{}: {}\n\n", key, term)).collect::<String>().as_bytes().to_vec()
-        };
-
-        match self.get_writer(client) {
-            Some(writer) => {
-                match writer.write_all(&Frame::from_payload(FrameKind::Text, response).encode()) {
-                    Ok(_) => StreamState::Keep,
-                    Err(_) => StreamState::Drop,
-                }
-            },
-            None => StreamState::Drop,
+        if let Some((i, _)) = self.clients.iter().enumerate().find(|(_, c)| c.id == id) {
+            self.clients.remove(i);
         }
     }
 
-    pub fn http_message_handler(&mut self, client: ClientId, message: HttpRequest) -> StreamState {
-        log!("client #{} requested {}", client.0, message.resource_location());
-        // returns true if should upgrade to websocket connection
-        match self.get_writer(client) {
+    pub fn websocket_message_handler(&mut self, id: ClientId, message_bytes: Vec<u8>, kind: FrameKind) -> StreamState {
+        match kind {
+            FrameKind::Text => self.text_websocket_message_handler(id, message_bytes),
+            FrameKind::Binary => {
+                // received unexpectedly
+                // TODO: add support
+                StreamState::Drop
+            },
+            FrameKind::Ping => {
+                let pong_frame = Frame::from_payload(FrameKind::Pong, message_bytes).encode();
+                self.write_bytes_to(id, &pong_frame)
+            },
+            FrameKind::Continue => {
+                log!("panicking, did not expect continue message from #{}", id.0);
+                StreamState::Drop
+            },
+            FrameKind::Pong => StreamState::Keep,
+            FrameKind::Close => StreamState::Drop, // that's what they want us to do anyway, right?
+        }
+    }
+
+    pub fn text_websocket_message_handler(&mut self, id: ClientId, message_bytes: Vec<u8>) -> StreamState {
+        if message_bytes == b"godset" {
+            let response_frame = Frame::from_payload(FrameKind::Text, self.god_set.raw_bytes()).encode();
+
+            self.write_bytes_to(id, &response_frame)
+        } else {
+            StreamState::Drop
+        }
+    }
+
+    pub fn http_message_handler(&mut self, id: ClientId, message: HttpRequest) -> StreamState {
+        log!("client #{} requested {}", id.0, message.resource_location());
+
+        // return StreamState::Keep if our connection should be updated to websockets
+        match self.get_writer(id) {
             Some(writer) => match handle_deelio(&message) {
                 Some(websocket_upgrade_response) => match writer.write_all(websocket_upgrade_response.as_bytes()) {
                     Ok(_) => StreamState::Keep,
@@ -158,7 +96,20 @@ impl ServerState {
                     StreamState::Drop
                 },
             },
-            None => panic!("could not find {:?}", client),
+            None => {
+                log!("Client #{} should exist", id.0);
+                StreamState::Drop
+            },
+        }
+    }
+
+    fn write_bytes_to(&mut self, id: ClientId, bytes: &[u8]) -> StreamState {
+        match self.get_client_mut(id) {
+            Some(c) => match c.writer.write_all(bytes) {
+                Ok(_) => StreamState::Keep,
+                Err(_) => StreamState::Drop,
+            },
+            None => StreamState::Drop,
         }
     }
 

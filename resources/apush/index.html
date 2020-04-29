@@ -11,44 +11,48 @@
 <h1>APUSH Helper</h1>
 <div id="interactivePortion">
     <label for="keywordInput">Input a keyword</label>
-    <input id="keywordInput" placeholder="keyword">
+    <input id="keywordInput" placeholder="keyword" autocomplete="off">
 
     <label for="yearRangeMin">Minimum Year</label>
-    <input type="number" id="yearRangeMin" placeholder="1600">
+    <input type="number" id="yearRangeMin" placeholder="1600" autocomplete="off">
     <label for="yearRangeMax">Maximum Year</label>
-    <input type="number" id="yearRangeMax" placeholder="2020">
+    <input type="number" id="yearRangeMax" placeholder="2020" autocomplete="off">
 
     <label for="socialChecked">Society and Culture</label>
-    <input type="checkbox" id="socialChecked" checked="checked">
+    <input type="checkbox" id="socialChecked" checked="checked" autocomplete="off">
     <label for="politicalChecked">Politics</label>
-    <input type="checkbox" id="politicalChecked" checked="checked">
+    <input type="checkbox" id="politicalChecked" checked="checked" autocomplete="off">
     <label for="economicChecked">Economy</label>
-    <input type="checkbox" id="economicChecked" checked="checked">
+    <input type="checkbox" id="economicChecked" checked="checked" autocomplete="off">
 
-    <textarea readonly="readonly" id="serverResponse" rows="20" cols="50"></textarea>
+    <textarea readonly="readonly" id="serverResponse" rows="20" cols="50" autocomplete="off"></textarea>
 
     <button id="sumbit" onclick="clickHandler()">Search</button>
 </div>
-<!--<hr>-->
-<!--<h1>Words</h1>-->
-<!--<p>I urge you not to think, "Oh, this exists, I don't need to study." Play around with it for a bit and see how not useful it is.-->
-<!--    Realize that the chance it crashes on test day is pretty high. Realize that Mr. Connors-Long might ask me to take it down.-->
-<!--    You can't do a DBQ with just vocab. You need some foundational understanding.</p>-->
-<!--<p>This tool was thrown together pretty quick. It's not Google.</p>-->
-<!--<p>If it's not working, make sure you hit the search button. If it's not that, then either my website crashed or your internet-->
-<!--    connection is bad, or something else idk. Probably my server crashed.</p>-->
-<!--<p>It's assumed that if you uncheck a theme, that you do not want to see terms that don't match the theme. The theme-->
-<!--    checkboxes were thrown together by categorizing each subsection of a chapter by each theme by just-->
-<!--    guessing and looking at the table of contents. Notably, stuff about war is categorized under politics.-->
-<!--    Frankly, the reason society and culture are together has a lot to do with me not-->
-<!--    knowing the difference between them. If they're not helping you, just leave them checked.</p>-->
-<!--<p>This thing is running on a Raspberry Pi under my TV. This thing can't take any stress.</p>-->
-<!--<p>Yeah it's very plain. If you have any experience with web design and you wanna help, shoot me something, I'm ewilliam0059.-->
-<!--    FYI, the page source is on <a href="https://github.com/EtomicBomb/ethan_ws">GitHub</a> too.</p>-->
-<!--<p>If you want the raw data behind this (maybe to Control-F through), you should check out <a href="/apush/godset.txt">godset.txt</a>-->
-<!--    and <a href="/metadata.txt">metadata.txt</a>. This data was derived from-->
-<!--    <a href="https://quizlet.com/class/8606959/">Mr. Connors-Long's APUSH Quizlets</a>.</p>-->
-
+<hr>
+<h1>Words</h1>
+<p>I urge you not to think, "Oh, this exists, I don't need to study." Play around with it for a bit and see how not useful it is.
+    Realize that the chance it crashes on test day is pretty high. Realize that Mr. Connors-Long might ask me to take it down
+    for exam day. You can't do a DBQ with just vocab. You need some foundational understanding.</p>
+<p>If you're questioning whether or not the College Board allows this, my answer is that in my opinion, I think they should. No
+    content of the requests you make is sent back to my server, or any other users of this service. All of the searching
+    happens entirely within your browser. This is the equivalent of downloading a file off of the internet and Control-F'ing
+    it in Word. If you don't believe me, check yourself. Use Inspect Element/View Page Source/Wireshark or whatever you want to
+    verify that the content of your searches stays with you. I can't speak for the College Board to say if they are actually cool with this.
+    If they aren't, you're taking on the liability of using this tool.</p>
+<p>I will probably continue to work on improving this tool. If you have any issues or specific suggestions, let me know.</p>
+<p>If it's not working, make sure you hit the search button. If it's not that, then either my website crashed or your internet
+    connection is bad, or something else idk. Probably my server crashed.</p>
+<p>It's assumed that if you uncheck a theme, that you do not want to see terms that don't match the theme. The theme
+    checkboxes were thrown together by categorizing each subsection of a chapter by each theme by just
+    guessing and looking at the table of contents. Notably, stuff about war is categorized under politics.
+    Frankly, the reason society and culture are together has a lot to do with me not
+    knowing the difference between them. If they're not helping you, just leave them checked.</p>
+<p>This thing is running on a Raspberry Pi under my TV. It can't take any stress.</p>
+<p>Yeah it's very plain. If you have any experience with web design and you wanna help, shoot me something, I'm ewilliam0059.
+    The source is on <a href="https://github.com/EtomicBomb/ethan_ws">GitHub</a> too.</p>
+<p>If you want the raw data this searches (maybe to Control-F through), you should check out <a href="/apush/godset.txt">godset.txt</a>. This data was derived from
+    <a href="https://quizlet.com/class/8606959/">Mr. Connors-Long's APUSH Quizlets</a>.</p>
 <script src="/apush/index.js"></script>
 </body>
 </html>

@@ -118,7 +118,7 @@ pub enum FrameKind {
     Continue = 0x0,
     Text = 0x1,
     Binary = 0x2,
-    RequestClose = 0x8,
+    Close = 0x8,
     Ping = 0x9,
     Pong = 0xA,
 }
@@ -129,7 +129,7 @@ impl FrameKind {
             0x0 => FrameKind::Continue,
             0x1 => FrameKind::Text,
             0x2 => FrameKind::Binary,
-            0x8 => FrameKind::RequestClose,
+            0x8 => FrameKind::Close,
             0x9 => FrameKind::Ping,
             0xA => FrameKind::Pong,
             _ => return None,
