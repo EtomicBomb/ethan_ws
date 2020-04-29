@@ -1,13 +1,12 @@
 use std::io::{Read};
-use crate::frame::{Frame, FrameError};
+use crate::frame::{Frame, FrameError, FrameKind};
 use crate::tcp_halves::TcpReader;
 
 const BYTES_AT_A_TIME: usize = 1024;
 
 
-pub fn get_message_block(reader: &mut TcpReader) -> Result<Vec<u8>, FrameError> {
+pub fn get_message_block(reader: &mut TcpReader) -> Result<(Vec<u8>, FrameKind), FrameError> {
     // blocks the current thread until we recieve a full message from the client
-
     let mut bytes_so_far = Vec::new();
 
     loop {
@@ -15,7 +14,7 @@ pub fn get_message_block(reader: &mut TcpReader) -> Result<Vec<u8>, FrameError> 
             Ok(frame) => {
                 bytes_so_far.extend_from_slice(frame.payload());
                 if frame.is_final_frame() {
-                    break Ok(bytes_so_far);
+                    break Ok((bytes_so_far, frame.kind()));
                 } // else: retry
             },
             Err(e) => break Err(e),

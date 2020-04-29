@@ -1,11 +1,13 @@
 use std::io::{Write, BufReader, BufRead};
-use crate::frame::{Frame, FrameType};
+use crate::frame::{Frame, FrameKind};
 use crate::tcp_halves::TcpWriter;
 use crate::http_request_parse::HttpRequest;
 use crate::base64::to_base64;
 use sha1::Sha1;
 use crate::http_handler::get_response_to_http;
 use std::ops::{RangeInclusive};
+use crate::log;
+use std::string::FromUtf8Error;
 
 const WEBSOCKET_SECURE_KEY_MAGIC_NUMBER: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -97,7 +99,10 @@ impl ServerState {
     pub fn new_connection_handler(&mut self, stream: TcpWriter) -> ClientId {
         let id = self.id_generator.next();
 
-        println!("new connection: {:?}", id);
+        match stream.get_ip_addr() {
+            Some((ip, port)) => log!("new connection to {}:{}, id #{}", ip, port, id.0),
+            None => log!("new connection to unknown, id #{}", id.0),
+        };
 
         self.clients.push(Client::new(id, stream));
 
@@ -105,14 +110,17 @@ impl ServerState {
     }
 
     pub fn drop_handler(&mut self, id: ClientId) {
+        log!("dropped connection to #{}", id.0);
         let (i, _) = self.clients.iter().enumerate().find(|(_, c)| c.id == id).unwrap();
         self.clients.remove(i);
     }
 
+    pub fn websocket_message_handler(&mut self, client: ClientId, message_bytes: Vec<u8>, kind: FrameKind) -> StreamState {
+        if kind != FrameKind::Text { return StreamState::Drop }
 
-    pub fn websocket_message_handler(&mut self, client: ClientId, message: Vec<u8>) {
-        let message = String::from_utf8_lossy(&message);
-        println!("client #{:?} sent `{}`", client, message);
+        let message = String::from_utf8_lossy(&message_bytes);
+
+        log!("client #{} made a WebSocket request: {}", client.0, message);
 
         let result = match self.god_set.parse_request(&message) {
             Some(ok) => ok,
@@ -127,23 +135,27 @@ impl ServerState {
 
         match self.get_writer(client) {
             Some(writer) => {
-                let _ = writer.write_all(&Frame::from_payload(FrameType::Text, response).encode());
+                match writer.write_all(&Frame::from_payload(FrameKind::Text, response).encode()) {
+                    Ok(_) => StreamState::Keep,
+                    Err(_) => StreamState::Drop,
+                }
             },
-            None => {},
+            None => StreamState::Drop,
         }
     }
 
-    pub fn http_message_handler(&mut self, client: ClientId, message: HttpRequest) -> ReaderResponseToHttp {
+    pub fn http_message_handler(&mut self, client: ClientId, message: HttpRequest) -> StreamState {
+        log!("client #{} requested {}", client.0, message.resource_location());
         // returns true if should upgrade to websocket connection
         match self.get_writer(client) {
             Some(writer) => match handle_deelio(&message) {
                 Some(websocket_upgrade_response) => match writer.write_all(websocket_upgrade_response.as_bytes()) {
-                    Ok(_) => ReaderResponseToHttp::UpgradeToWebsocket,
-                    Err(_) => ReaderResponseToHttp::Drop,
+                    Ok(_) => StreamState::Keep,
+                    Err(_) => StreamState::Drop,
                 },
                 None => {
                     let _ = get_response_to_http(&message, writer);
-                    ReaderResponseToHttp::Drop
+                    StreamState::Drop
                 },
             },
             None => panic!("could not find {:?}", client),
@@ -190,8 +202,8 @@ impl ClientIdGenerator {
 }
 
 
-pub enum ReaderResponseToHttp {
-    UpgradeToWebsocket,
+pub enum StreamState {
+    Keep,
     Drop,
 }
 

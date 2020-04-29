@@ -2,7 +2,7 @@ use std::io;
 
 #[derive(Debug)]
 pub struct Frame {
-    frame_type: FrameType,
+    frame_kind: FrameKind,
     is_final_frame: bool,
     payload: Vec<u8>,
     mask: Option<[u8; 4]>,
@@ -11,8 +11,8 @@ pub struct Frame {
 
 
 impl Frame {
-    pub fn from_payload(frame_type: FrameType, payload: Vec<u8>) -> Frame {
-        Frame { frame_type, is_final_frame: true, payload, mask: None }
+    pub fn from_payload(frame_type: FrameKind, payload: Vec<u8>) -> Frame {
+        Frame { frame_kind: frame_type, is_final_frame: true, payload, mask: None }
     }
 
     pub fn encode(&self) -> Vec<u8> {
@@ -21,7 +21,7 @@ impl Frame {
 
         let mut ret = vec![
             if self.is_final_frame { 0b_1000_0000 } else { 0b_0000_000 }
-                | self.frame_type as u8,
+                | self.frame_kind as u8,
             if self.mask.is_some() { 0b_1000_0000 } else { 0b_0000_000 }
                 | len_descriptor.to_byte()
         ];
@@ -52,7 +52,7 @@ impl Frame {
 
         let is_final_frame = (get(0)? >> 7) == 1;
 
-        let frame_type = match FrameType::from_number(get(0)? & 0b1111) {
+        let frame_type = match FrameKind::from_number(get(0)? & 0b1111) {
             Some(frame_type) => frame_type,
             None => return Err(FrameError::InvalidOpcode),
         };
@@ -97,7 +97,7 @@ impl Frame {
             };
 
 
-        Ok(Frame { frame_type, is_final_frame, payload: decoded_data, mask })
+        Ok(Frame { frame_kind: frame_type, is_final_frame, payload: decoded_data, mask })
     }
 
     pub fn is_final_frame(&self) -> bool {
@@ -107,10 +107,14 @@ impl Frame {
     pub fn payload(&self) -> &[u8] {
         &self.payload
     }
+
+    pub fn kind(&self) -> FrameKind {
+        self.frame_kind
+    }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum FrameType {
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum FrameKind {
     Continue = 0x0,
     Text = 0x1,
     Binary = 0x2,
@@ -119,15 +123,15 @@ pub enum FrameType {
     Pong = 0xA,
 }
 
-impl FrameType {
-    pub fn from_number(opcode: u8) -> Option<FrameType> {
+impl FrameKind {
+    pub fn from_number(opcode: u8) -> Option<FrameKind> {
         Some(match opcode {
-            0x0 => FrameType::Continue,
-            0x1 => FrameType::Text,
-            0x2 => FrameType::Binary,
-            0x8 => FrameType::RequestClose,
-            0x9 => FrameType::Ping,
-            0xA => FrameType::Pong,
+            0x0 => FrameKind::Continue,
+            0x1 => FrameKind::Text,
+            0x2 => FrameKind::Binary,
+            0x8 => FrameKind::RequestClose,
+            0x9 => FrameKind::Ping,
+            0xA => FrameKind::Pong,
             _ => return None,
         })
     }

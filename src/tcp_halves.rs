@@ -1,5 +1,5 @@
 
-use std::net::TcpStream;
+use std::net::{TcpStream, IpAddr};
 use std::cell::UnsafeCell;
 use std::io::{self, Read, Write, IoSliceMut, IoSlice};
 use std::sync::Arc;
@@ -45,6 +45,11 @@ pub struct TcpWriter {
 impl TcpWriter {
     fn new(tcp_stream: Arc<UnsafeCell<TcpStream>>) -> TcpWriter {
         TcpWriter { tcp_stream }
+    }
+
+    pub fn get_ip_addr(&self) -> Option<(IpAddr, u16)> {
+        let r: &TcpStream = unsafe { &*self.tcp_stream.get() };
+        r.peer_addr().ok().map(|a| (a.ip(), a.port()))
     }
 }
 
