@@ -17,12 +17,12 @@ mod http_handler;
 #[macro_use]
 mod log;
 
-
-
 use crate::http_request_parse::HttpRequest;
 use crate::frame_stream::{get_message_block};
 use crate::tcp_halves::{split, TcpReader};
 use crate::server_state::{ServerState, StreamState, ClientId};
+
+const MAX_HTTP_REQUEST_SIZE: usize = 2048;
 
 // https://tools.ietf.org/html/rfc6455
 // https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
@@ -72,7 +72,7 @@ fn handle_new_connection(stream: TcpStream, state: Arc<Mutex<ServerState>>) {
     let id = state.lock().unwrap().new_connection_handler(stream_writer);
 
     thread::spawn(move || {
-        let mut buf = [0u8; 512];
+        let mut buf = [0u8; MAX_HTTP_REQUEST_SIZE];
         if let Ok(len) = stream_reader.read(&mut buf) {
             if let Ok(request) = HttpRequest::from_str(&String::from_utf8_lossy(&buf[0..len])) {
                 let result = state.lock().unwrap().http_message_handler(id, request);
