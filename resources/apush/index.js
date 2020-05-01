@@ -8,21 +8,24 @@ socket.onopen = function() {
 };
 
 socket.onmessage = function(msg) {
-    for (var line of msg.data.split("\n")) {
-        if (!line) continue;
+    console.log(msg.data);
+    godset = JSON.parse(msg.data);
 
-        var fields = line.split("\t"); // yearStart, yearEnd, social?, political?, economic?, term, definition
-
-         godset.push({
-            yearStart: fields[0],
-            yearEnd: fields[1],
-            social: fields[2] === "true",
-            political: fields[3] === "true",
-            economic: fields[4] === "true",
-            term: fields[5],
-            definition: fields[6],
-         });
-    }
+//    for (var line of msg.data.split("\n")) {
+//        if (!line) continue;
+//
+//        var fields = line.split("\t"); // yearStart, yearEnd, social?, political?, economic?, term, definition
+//
+//         godset.push({
+//            yearStart: fields[0],
+//            yearEnd: fields[1],
+//            social: fields[2] === "true",
+//            political: fields[3] === "true",
+//            economic: fields[4] === "true",
+//            term: fields[5],
+//            definition: fields[6],
+//         });
+//    }
 
     console.log("we have received the glorious godset in all " + godset.length + " of its lines");
 };

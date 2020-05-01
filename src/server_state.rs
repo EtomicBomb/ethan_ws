@@ -9,6 +9,7 @@ use crate::base64::to_base64;
 use crate::http_handler::get_response_to_http;
 use crate::log;
 use crate::god_set::GodSet;
+use std::fmt;
 
 const WEBSOCKET_SECURE_KEY_MAGIC_NUMBER: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -33,8 +34,8 @@ impl ServerState {
         let id = self.id_generator.next();
 
         match stream.get_ip_addr() {
-            Some((ip, port)) => log!("new connection to {}:{}, id #{}", ip, port, id.0),
-            None => log!("new connection to unknown, id #{}", id.0),
+            Some((ip, port)) => log!("new connection to {}:{}, id {}", ip, port, id),
+            None => log!("new connection to unknown, id {}", id),
         };
 
         self.clients.push(Client::new(id, stream));
@@ -43,7 +44,7 @@ impl ServerState {
     }
 
     pub fn drop_handler(&mut self, id: ClientId) {
-        log!("dropped connection to #{}", id.0);
+        log!("dropped connection to {}", id);
 
         if let Some((i, _)) = self.clients.iter().enumerate().find(|(_, c)| c.id == id) {
             self.clients.remove(i);
@@ -63,7 +64,7 @@ impl ServerState {
                 self.write_bytes_to(id, &pong_frame)
             },
             FrameKind::Continue => {
-                log!("panicking, did not expect continue message from #{}", id.0);
+                log!("panicking, did not expect continue message from {}", id);
                 StreamState::Drop
             },
             FrameKind::Pong => StreamState::Keep,
@@ -82,7 +83,7 @@ impl ServerState {
     }
 
     pub fn http_message_handler(&mut self, id: ClientId, message: HttpRequest) -> StreamState {
-        log!("client #{} requested {}", id.0, message.resource_location());
+        log!("client {} requested {}", id, message.resource_location());
 
         // return StreamState::Keep if our connection should be updated to websockets
         match self.get_writer(id) {
@@ -97,7 +98,7 @@ impl ServerState {
                 },
             },
             None => {
-                log!("Client #{} should exist", id.0);
+                log!("Client {} should exist", id);
                 StreamState::Drop
             },
         }
@@ -138,7 +139,17 @@ impl Client {
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct ClientId(u64);
+impl ClientId {
+    fn inner(&self) -> u64 {
+        self.0
+    }
+}
 
+impl fmt::Display for ClientId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "#{}", self.0)
+    }
+}
 
 struct ClientIdGenerator(u64);
 impl ClientIdGenerator {

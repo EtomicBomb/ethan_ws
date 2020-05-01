@@ -15,6 +15,7 @@ mod server_state;
 mod tcp_halves;
 mod http_handler;
 mod god_set;
+mod json;
 
 #[macro_use]
 mod log;
@@ -36,13 +37,13 @@ fn main() -> io::Result<()> {
 
     log!("server started");
 
-    let handle = thread::spawn(move || {
+    let handle = thread::Builder::new().name(String::from("ethan_ws_listener")).spawn(move || {
         for stream in TcpListener::bind("0.0.0.0:80").expect("couldnt bind").incoming() {
             if let Ok(stream) = stream {
                 handle_new_connection(stream, Arc::clone(&cloned_state));
             }
         }
-    });
+    }).unwrap();
 
     // do stuff to state here
 
@@ -73,7 +74,7 @@ fn handle_new_connection(stream: TcpStream, state: Arc<Mutex<ServerState>>) {
     let (mut stream_reader, stream_writer) = split(stream);
     let id = state.lock().unwrap().new_connection_handler(stream_writer);
 
-    thread::spawn(move || {
+    thread::Builder::new().name(format!("ethan_ws{}", id)).spawn(move ||{
         let mut buf = [0u8; MAX_HTTP_REQUEST_SIZE];
         if let Ok(len) = stream_reader.read(&mut buf) {
             if let Ok(request) = HttpRequest::from_str(&String::from_utf8_lossy(&buf[0..len])) {
@@ -85,7 +86,7 @@ fn handle_new_connection(stream: TcpStream, state: Arc<Mutex<ServerState>>) {
         }
 
         state.lock().unwrap().drop_handler(id);
-    });
+    }).expect("couldnt spawn thread");
 }
 
 fn start_websocket_listener(state: Arc<Mutex<ServerState>>, id: ClientId, stream_reader: &mut TcpReader) {
