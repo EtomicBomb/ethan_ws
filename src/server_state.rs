@@ -1,6 +1,7 @@
 use sha1::Sha1;
 
 use std::io::{Write};
+use std::fmt;
 
 use crate::frame::{Frame, FrameKind};
 use crate::tcp_halves::TcpWriter;
@@ -9,7 +10,6 @@ use crate::base64::to_base64;
 use crate::http_handler::get_response_to_http;
 use crate::log;
 use crate::god_set::GodSet;
-use std::fmt;
 
 const WEBSOCKET_SECURE_KEY_MAGIC_NUMBER: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -73,7 +73,7 @@ impl ServerState {
     }
 
     pub fn text_websocket_message_handler(&mut self, id: ClientId, message_bytes: Vec<u8>) -> StreamState {
-        if message_bytes == b"godset" {
+        if self.get_client(id).unwrap().upgraded.as_ref().unwrap().resource_location() == "/godset" {
             let response_frame = Frame::from_payload(FrameKind::Text, self.god_set.raw_bytes()).encode();
 
             self.write_bytes_to(id, &response_frame)
@@ -88,9 +88,14 @@ impl ServerState {
         // return StreamState::Keep if our connection should be updated to websockets
         match self.get_writer(id) {
             Some(writer) => match handle_deelio(&message) {
-                Some(websocket_upgrade_response) => match writer.write_all(websocket_upgrade_response.as_bytes()) {
-                    Ok(_) => StreamState::Keep,
-                    Err(_) => StreamState::Drop,
+                Some(websocket_upgrade_response) => {
+                    match writer.write_all(websocket_upgrade_response.as_bytes()) {
+                        Ok(_) => {
+                            self.get_client_mut(id).unwrap().upgrade(message);
+                            StreamState::Keep
+                        },
+                        Err(_) => StreamState::Drop,
+                    }
                 },
                 None => {
                     let _ = get_response_to_http(&message, writer);
@@ -114,6 +119,11 @@ impl ServerState {
         }
     }
 
+    fn get_client(&self, id: ClientId) -> Option<&Client> {
+        self.clients.iter()
+            .find(|c| c.id == id)
+    }
+
     fn get_client_mut(&mut self, id: ClientId) -> Option<&mut Client> {
         self.clients.iter_mut()
             .find(|c| c.id == id)
@@ -122,18 +132,22 @@ impl ServerState {
     fn get_writer(&mut self, id: ClientId) -> Option<&mut TcpWriter> {
         self.get_client_mut(id).map(|c| &mut c.writer)
     }
-
 }
 
 
 pub struct Client {
     pub id: ClientId,
+    pub upgraded: Option<HttpRequest>, // the request that they used to upgrade their connection
     pub writer: TcpWriter,
 }
 
 impl Client {
     fn new(id: ClientId, writer: TcpWriter) -> Client {
-        Client { id, writer }
+        Client { id, writer, upgraded: None }
+    }
+
+    fn upgrade(&mut self, message: HttpRequest) {
+        self.upgraded = Some(message);
     }
 }
 

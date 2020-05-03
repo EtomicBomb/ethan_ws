@@ -77,13 +77,13 @@ impl FromStr for Json {
     }
 }
 
-pub struct SplitTopLevel<'a> {
+struct SplitTopLevel<'a> {
     bytes: &'a [u8],
     split_on: u8,
 }
 
 impl<'a> SplitTopLevel<'a> {
-    pub fn new(s: &'a str, split_on: u8) -> SplitTopLevel<'a> {
+    fn new(s: &'a str, split_on: u8) -> SplitTopLevel<'a> {
         SplitTopLevel {
             bytes: s.as_bytes(),
             split_on
@@ -134,7 +134,7 @@ impl<'a> Iterator for SplitTopLevel<'a> {
 
 
 
-pub fn into_json_string(s: &str) -> String {
+fn into_json_string(s: &str) -> String {
     let mut ret = String::with_capacity(s.len()); // might be longer but why not
 
     for c in s.chars() {
@@ -162,7 +162,7 @@ pub fn into_json_string(s: &str) -> String {
     format!(r#""{}""#, ret)
 }
 
-pub fn parse_json_string(s: &str) -> Result<String, ()> {
+fn parse_json_string(s: &str) -> Result<String, ()> {
     if !(s.len() > 1 && s.starts_with('"') && s.ends_with('"')) {
         return Err(());
     }

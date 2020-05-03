@@ -16,7 +16,6 @@ mod tcp_halves;
 mod http_handler;
 mod god_set;
 mod json;
-
 #[macro_use]
 mod log;
 
@@ -80,6 +79,7 @@ fn handle_new_connection(stream: TcpStream, state: Arc<Mutex<ServerState>>) {
             if let Ok(request) = HttpRequest::from_str(&String::from_utf8_lossy(&buf[0..len])) {
                 let result = state.lock().unwrap().http_message_handler(id, request);
                 if let StreamState::Keep = result {
+
                     start_websocket_listener(Arc::clone(&state), id, &mut stream_reader)
                 }
             }
