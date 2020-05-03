@@ -139,11 +139,6 @@ impl Client {
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct ClientId(u64);
-impl ClientId {
-    fn inner(&self) -> u64 {
-        self.0
-    }
-}
 
 impl fmt::Display for ClientId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
