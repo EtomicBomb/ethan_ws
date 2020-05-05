@@ -1,4 +1,5 @@
 use std::io;
+use std::io::ErrorKind;
 
 #[derive(Debug)]
 pub struct Frame {
@@ -148,6 +149,7 @@ pub enum FrameError {
     IoError(io::Error),
     InvalidOpcode,
     FrameTooSmall,
+    ConnectionClosed,
 }
 
 impl FrameError {
@@ -156,6 +158,7 @@ impl FrameError {
             FrameError::FrameTooSmall => true, // we can solve by pulling larger frames !
             FrameError::InvalidOpcode => false,
             FrameError::IoError(..) => false,
+            FrameError::ConnectionClosed => false,
         }
     }
 }

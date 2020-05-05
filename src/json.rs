@@ -12,6 +12,45 @@ pub enum Json {
     Object(HashMap<String, Json>),
 }
 
+impl Json {
+    pub fn get_null(&self) -> Option<()> {
+        match *self {
+            Json::Null => Some(()),
+            _ => None,
+        }
+    }
+    pub fn get_bool(&self) -> Option<bool> {
+        match *self {
+            Json::Boolean(b) => Some(b),
+            _ => None,
+        }
+    }
+    pub fn get_number(&self) -> Option<f64> {
+        match *self {
+            Json::Number(n) => Some(n),
+            _ => None,
+        }
+    }
+    pub fn get_string(&self) -> Option<&str> {
+        match *self {
+            Json::String(ref s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
+    pub fn get_array(&self) -> Option<&[Json]> {
+        match *self {
+            Json::Array(ref a) => Some(a.as_slice()),
+            _ => None,
+        }
+    }
+    pub fn get_object(&self) -> Option<&HashMap<String, Json>> {
+        match *self {
+            Json::Object(ref o) => Some(o),
+            _ => None,
+        }
+    }
+}
+
 impl fmt::Display for Json {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {

@@ -26,10 +26,13 @@ pub fn get_message_block(reader: &mut TcpReader) -> Result<(Vec<u8>, FrameKind),
 fn read_next_frame(tcp_reader: &mut TcpReader) -> Result<Frame, FrameError> {
     let mut buf = Vec::new();
 
-    let mut loop_count = 0;
     loop {
         let mut to_add = [0; BYTES_AT_A_TIME];
         let len = tcp_reader.read(&mut to_add)?;
+        if len == 0 {
+            return Err(FrameError::ConnectionClosed);
+        }
+
         buf.extend_from_slice(&to_add[..len]);
 
         match Frame::decode(&buf) {
@@ -39,11 +42,6 @@ fn read_next_frame(tcp_reader: &mut TcpReader) -> Result<Frame, FrameError> {
             },
             Err(e) if e.should_retry() => {},
             Err(e) => break Err(e),
-        }
-        loop_count += 1;
-        if loop_count > 500 {
-            log!("large loop count");
-            panic!("large loop count");
         }
     }
 }

@@ -10,6 +10,9 @@ use crate::base64::to_base64;
 use crate::http_handler::get_response_to_http;
 use crate::log;
 use crate::god_set::GodSet;
+use crate::filler;
+use crate::json::Json;
+use std::str::FromStr;
 
 const WEBSOCKET_SECURE_KEY_MAGIC_NUMBER: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -73,12 +76,33 @@ impl ServerState {
     }
 
     pub fn text_websocket_message_handler(&mut self, id: ClientId, message_bytes: Vec<u8>) -> StreamState {
-        if self.get_client(id).unwrap().upgraded.as_ref().unwrap().resource_location() == "/godset" {
-            let response_frame = Frame::from_payload(FrameKind::Text, self.god_set.raw_bytes()).encode();
-
-            self.write_bytes_to(id, &response_frame)
-        } else {
-            StreamState::Drop
+        match self.get_client(id).unwrap().upgraded.as_ref().unwrap().resource_location() {
+            "/godset" => {
+                let response_frame = Frame::from_payload(FrameKind::Text, self.god_set.raw_bytes()).encode();
+                self.write_bytes_to(id, &response_frame)
+            },
+            "/filler" => {
+                // var a = new WebSocket("ws://ethan.ws/filler"); a.onmessage = function(msg) {console.log(msg)}
+                match String::from_utf8(message_bytes) {
+                    Ok(string) => match Json::from_str(&string) {
+                        Ok(ref json) if json.get_null().is_some() => {
+                            let json_string = filler::new_game_state().to_string();
+                            let frame = Frame::from_payload(FrameKind::Text, json_string.into_bytes());
+                            self.write_bytes_to(id, &frame.encode())
+                        },
+                        Ok(ref json) => match filler::handle_request(json) {
+                            Some(reply) => {
+                                let frame = Frame::from_payload(FrameKind::Text, reply.to_string().into_bytes());
+                                self.write_bytes_to(id, &frame.encode())
+                            },
+                            None => StreamState::Drop,
+                        },
+                        Err(_) => StreamState::Drop,
+                    },
+                    Err(_) => StreamState::Drop,
+                }
+            },
+            _ => StreamState::Drop
         }
     }
 
