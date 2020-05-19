@@ -1,11 +1,10 @@
 use sha1::Sha1;
+use websocket::{Frame, FrameKind};
+use http::HttpRequest;
 
 use std::io::{Write};
 use std::fmt;
 
-use crate::frame::{Frame, FrameKind};
-use crate::tcp_halves::TcpWriter;
-use crate::http_request_parse::HttpRequest;
 use crate::base64::to_base64;
 use crate::http_handler::get_response_to_http;
 use crate::log;
@@ -13,6 +12,7 @@ use crate::god_set::GodSet;
 use crate::filler;
 use crate::json::Json;
 use std::str::FromStr;
+use std::net::TcpStream;
 
 const WEBSOCKET_SECURE_KEY_MAGIC_NUMBER: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -33,12 +33,12 @@ impl ServerState {
         }
     }
 
-    pub fn new_connection_handler(&mut self, stream: TcpWriter) -> ClientId {
+    pub fn new_connection_handler(&mut self, stream: TcpStream) -> ClientId {
         let id = self.id_generator.next();
 
-        match stream.get_ip_addr() {
-            Some((ip, port)) => log!("new connection to {}:{}, id {}", ip, port, id),
-            None => log!("new connection to unknown, id {}", id),
+        match stream.peer_addr() {
+            Ok(addr) => log!("new connection to {}:{}, id {}", addr.ip(), addr.port(), id),
+            Err(_) => log!("new connection to unknown, id {}", id),
         };
 
         self.clients.push(Client::new(id, stream));
@@ -153,7 +153,7 @@ impl ServerState {
             .find(|c| c.id == id)
     }
 
-    fn get_writer(&mut self, id: ClientId) -> Option<&mut TcpWriter> {
+    fn get_writer(&mut self, id: ClientId) -> Option<&mut TcpStream> {
         self.get_client_mut(id).map(|c| &mut c.writer)
     }
 }
@@ -162,11 +162,11 @@ impl ServerState {
 pub struct Client {
     pub id: ClientId,
     pub upgraded: Option<HttpRequest>, // the request that they used to upgrade their connection
-    pub writer: TcpWriter,
+    pub writer: TcpStream,
 }
 
 impl Client {
-    fn new(id: ClientId, writer: TcpWriter) -> Client {
+    fn new(id: ClientId, writer: TcpStream) -> Client {
         Client { id, writer, upgraded: None }
     }
 

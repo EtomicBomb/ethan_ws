@@ -61,7 +61,7 @@ pub enum ParseError {
 }
 
 #[derive(Debug)]
-enum RequestType {
+pub enum RequestType {
     Get,
     Head,
     Post,

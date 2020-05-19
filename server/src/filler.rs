@@ -1,16 +1,9 @@
-use rand::{thread_rng, Rng, random};
-use rand::seq::SliceRandom;
-use rand::seq::IteratorRandom;
+use rand::{Rng, random};
 use rand::distributions::{Distribution, Standard};
 
-
-use std::fmt::{self, Display, Write};
 use std::collections::{HashSet, HashMap};
-use std::time::{Instant, Duration};
 
 use crate::json::Json;
-
-const BLOCK_SIZE_PIXELS: usize = 10;
 
 const WIDTH: usize = 8;
 const HEIGHT: usize = 7;
@@ -45,7 +38,7 @@ pub fn handle_request(json: &Json) -> Option<Json> {
 }
 
 
-fn max_advantage(mut game_state: GameState, is_left: bool, is_our_turn: bool, depth_left: usize) -> isize {
+fn max_advantage(game_state: GameState, is_left: bool, is_our_turn: bool, depth_left: usize) -> isize {
     if depth_left == 0 {
         game_state.left_advantage() * if is_left { 1 } else { -1 }
     } else {
@@ -84,7 +77,7 @@ impl GameState {
     }
 
     pub fn get_colors(&self) -> Vec<Color> {
-        let mut reasonable = self.reasonable_colors();
+        let reasonable = self.reasonable_colors();
 
         if reasonable.is_empty() {
             self.valid_colors().to_vec()
@@ -391,55 +384,3 @@ impl Field {
         Field { inner: new_inner }
     }
 }
-
-// fn interactive() {
-//     let mut window: PistonWindow<GlutinWindow> = WindowSettings::new(
-//         "Filler",
-//         [(WIDTH*BLOCK_SIZE_PIXELS) as u32, (HEIGHT*BLOCK_SIZE_PIXELS) as u32],
-//     )
-//         .exit_on_esc(true)
-//         .build()
-//         .unwrap();
-//
-//     let mut game_state = GameState::new();
-//
-//     let mut blink_on = true;
-//     let mut last_blink = Instant::now();
-//
-//     let mut cursor_x = 0;
-//     let mut cursor_y = 0;
-//
-//     while let Some(e) = window.next() {
-//         window.draw_2d(&e, |c, g, _| {
-//             if last_blink.elapsed() > Duration::from_millis(750) {
-//                 last_blink = Instant::now();
-//                 blink_on = !blink_on;
-//             }
-//
-//             draw_game_state(&game_state, blink_on, g, &c);
-//         });
-//
-//         e.mouse_cursor(|[x, y]| {
-//             cursor_x = x as usize;
-//             cursor_y = y as usize;
-//         });
-//
-//
-//         e.press(|args| {
-//             if let Button::Mouse(mouse_button) = args {
-//                 if game_state.is_left_turn && mouse_button == MouseButton::Left {
-//                     let color_selected = game_state.field.get(cursor_x/BLOCK_SIZE_PIXELS, cursor_y/BLOCK_SIZE_PIXELS).unwrap();
-//
-//                     if game_state.do_move(color_selected).is_err() {
-//                         println!("invalid move");
-//                         return;
-//                     }
-//
-//                     // enemy turn
-//
-//                     println!("left {}\nright {}\n", game_state.left_territory.len(), game_state.right_territory.len());
-//                 }
-//             }
-//         });
-//     }
-// }

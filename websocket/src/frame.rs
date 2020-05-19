@@ -1,5 +1,4 @@
 use std::io;
-use std::io::ErrorKind;
 
 #[derive(Debug)]
 pub struct Frame {
@@ -8,8 +7,6 @@ pub struct Frame {
     payload: Vec<u8>,
     mask: Option<[u8; 4]>,
 }
-
-
 
 impl Frame {
     pub fn from_payload(frame_type: FrameKind, payload: Vec<u8>) -> Frame {

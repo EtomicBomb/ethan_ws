@@ -1,10 +1,11 @@
+use http::HttpRequest;
+
 use std::path::{Path, PathBuf};
 use std::io::{self, Write, Read};
 use std::fs::File;
+use std::net::TcpStream;
 
-use crate::http_request_parse::HttpRequest;
 use crate::{ServerError};
-use crate::tcp_halves::TcpWriter;
 
 const RESOURCES_ROOT: &'static str = "/home/pi/Desktop/server/resources";
 
@@ -12,7 +13,7 @@ const RESOURCES_ROOT: &'static str = "/home/pi/Desktop/server/resources";
 const ERROR_404_RESPONSE: &'static [u8] = b"HTTP/1.1 404 Page Not Found\r\n\r\n<!DOCTYPE html><html lang='en-US'><head><meta charset='UTF-8'><title>ethan.ws</title></head><body><h1>Error 404 - Page Not Found</h1></body></html>";
 const ERROR_500_RESPONSE: &'static [u8] = b"HTTP/1.1 500 Internal Server Error\r\n\r\n<!DOCTYPE html><html lang='en-US'><head><meta charset='UTF-8'><title>ethan.ws</title></head><body><h1>Error 500 - Internal Server Error</h1></body></html>";
 
-pub fn get_response_to_http(request: &HttpRequest, writer: &mut TcpWriter) -> Result<(), ServerError> {
+pub fn get_response_to_http(request: &HttpRequest, writer: &mut TcpStream) -> Result<(), ServerError> {
     match get_data(request.resource_location()) {
         Ok(data) => {
             writer.write_all(b"HTTP/1.1 200 OK\r\n\r\n")?;

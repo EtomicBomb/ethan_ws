@@ -123,30 +123,6 @@ impl Node {
                     Some(&Expression::Atom(Atom::Symbol(ref operator))) => {
                         let args = &children[1..];
 
-                        macro_rules! def {
-                            ($name:literal =$num_parameters:literal $definition:block) => {{
-                                if args.len() == $num_parameters {
-                                    $definition
-                                } else {
-                                    Err(RuntimeError {
-                                        kind: RuntimeErrorKind::WrongNumberOfArguments($name.to_string(), args.len(), ParameterCount::Exactly($num_parameters)),
-                                        span: self.span
-                                    })
-                                }
-                            }};
-                            ($name:literal >$num_parameters:literal $definiton:block) => {{
-                                if args.len() == $num_parameters {
-                                    $definition
-                                } else {
-                                    Err(RuntimeError {
-                                        kind: RuntimeErrorKind::WrongNumberOfArguments($name.to_string(), args.len(), ParameterCount::GreaterThan($num_parameters)),
-                                        span: self.span
-                                    })
-                                }
-                            }};
-                            ($name:literal any $definition:block) => {{ $definition }};
-                        }
-
                         match operator.as_str() {
                             "+" => {
                                 let mut sum = 0.0;
