@@ -1,8 +1,9 @@
 [package]
 name = "server"
 version = "0.1.0"
-authors = ["EtomicBomb <ethan@ethan.ws>"]
+authors = ["EtomicBomb"]
 edition = "2018"
+license = "MIT OR Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -14,4 +15,4 @@ lazy_static = "1.4.0"
 chrono = "0.4.11"
 rand = "0.7.3"
 json = { path = "../json" }
-lisp = { path = "/home/etomicbomb/RustProjects/ethan_ws/lisp" }
+lisp = { path = "../lisp" }

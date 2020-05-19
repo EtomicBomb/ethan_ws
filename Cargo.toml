@@ -1,7 +1,3 @@
 [workspace]
 
-members = [
-    "server",
-    "json",
-    "lisp",
-]
+members = ["server", "json", "lisp"]
