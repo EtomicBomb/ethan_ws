@@ -1,0 +1,31 @@
+TOP = { SOI ~ (function_definition | macro_definition)* ~ EOI }
+
+
+macro_definition = { symbol ~ "{" ~ argument_list ~ "}" ~ expression }
+
+function_definition = { symbol ~ "[" ~ argument_list ~ "]" ~ expression }
+
+argument_list = { symbol* }
+
+expression = { "'"? ~ (list | atom) }
+list = { "(" ~ expression* ~ ")" }
+atom = { keyword | number | string | symbol }
+
+keyword = @{ ":" ~ identifier }
+number = @{ ASCII_DIGIT+ }
+symbol = @{ identifier }
+string = @{"\"" ~ not_quote* ~  "\""}
+
+not_quote = _{ !"\"" ~ ANY }
+
+identifier = _{ identifier_start ~ identifier_continue* }
+identifier_start = _{  ID_START | punctuation }
+identifier_continue = _{ ID_CONTINUE | punctuation }
+punctuation = _{
+    "!" | "~" | "$" | "%" | "&" | "|" |
+    "*" | "+" | "," | "-" | "." | "/" |
+    "#" | ";" | "<" | "=" | ">" | "?" |
+    "@" | "^" | "_" | "`"
+}
+
+WHITESPACE = _{ " " | "\t" | "\n" | "\r" }

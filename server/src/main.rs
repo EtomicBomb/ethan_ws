@@ -1,6 +1,9 @@
 #[macro_use]
 extern crate pest_derive;
 
+extern crate json;
+extern crate lisp;
+
 use std::net::{TcpListener, TcpStream};
 use std::io::{self, Read};
 use std::str::FromStr;
@@ -15,7 +18,6 @@ mod server_state;
 mod tcp_halves;
 mod http_handler;
 mod god_set;
-mod json;
 mod filler;
 #[macro_use]
 mod log;
