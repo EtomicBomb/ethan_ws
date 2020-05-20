@@ -1,7 +1,6 @@
 use crate::json::Json;
 use std::io::{BufReader, BufRead};
-
-const GOD_SET_PATH: &'static str = "/home/pi/Desktop/server/resources/apush/godset.txt";
+use crate::GOD_SET_PATH;
 
 pub struct GodSet {
     json: Vec<u8>,

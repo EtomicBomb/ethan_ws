@@ -23,6 +23,9 @@ mod log;
 use crate::server_state::{ServerState, StreamState, ClientId};
 
 const MAX_HTTP_REQUEST_SIZE: usize = 2048;
+const RESOURCES_ROOT: &'static str = "/home/pi/Desktop/server/resources";
+const LOG_FILE_PATH: &'static str = "/home/pi/Desktop/server/log.txt";
+const GOD_SET_PATH: &'static str = "/home/pi/Desktop/server/resources/apush/godset.txt";
 
 // https://tools.ietf.org/html/rfc6455
 // https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
@@ -35,7 +38,7 @@ fn main() -> io::Result<()> {
     log!("server started");
 
     let handle = thread::Builder::new().name(String::from("ethan_ws_listener")).spawn(move || {
-        for stream in TcpListener::bind("0.0.0.0:80").expect("couldnt bind").incoming() {
+        for stream in TcpListener::bind("0.0.0.0:8080").expect("couldnt bind").incoming() {
             if let Ok(stream) = stream {
                 handle_new_connection(stream, Arc::clone(&cloned_state));
             }
@@ -43,7 +46,6 @@ fn main() -> io::Result<()> {
     }).unwrap();
 
     // do stuff to state here
-
 
     handle.join().unwrap();
     Ok(())

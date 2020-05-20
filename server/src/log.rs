@@ -5,8 +5,7 @@ use std::io::Write;
 use std::sync::Mutex;
 
 use lazy_static::lazy_static;
-
-const LOG_FILE_PATH: &'static str = "/home/pi/Desktop/server/log.txt";
+use crate::LOG_FILE_PATH;
 
 lazy_static! {
     static ref LOG_FILE: Mutex<File> = Mutex::new(OpenOptions::new().append(true).open(LOG_FILE_PATH).unwrap());
