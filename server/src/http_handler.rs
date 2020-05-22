@@ -2,7 +2,7 @@ use http::HttpRequest;
 
 use std::path::{Path, PathBuf};
 use std::io::{self, Write, Read};
-use std::fs::File;
+use std::fs::{File};
 use std::net::TcpStream;
 
 use crate::{ServerError, RESOURCES_ROOT};

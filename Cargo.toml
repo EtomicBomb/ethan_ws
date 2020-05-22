@@ -1,3 +1,3 @@
 [workspace]
 
-members = ["server", "json", "lisp", "websocket", "http"]
+members = ["server", "json", "lisp", "websocket", "http", "cool_binary"]

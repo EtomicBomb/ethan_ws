@@ -32,6 +32,9 @@ pub enum RuntimeErrorKind {
     UndefinedFunction(String),
     VariableNameMustBeSymbol(String),
     VariableNotFound(String),
+    ReadFileArgumentMustBeString,
+    ReadFileCouldntReadFile(String),
+    ConcatArgMustBeByteVector,
     WrongNumberOfArguments(String, usize, ParameterCount),
 }
 
@@ -46,6 +49,9 @@ impl fmt::Display for RuntimeErrorKind {
             RuntimeErrorKind::UndefinedFunction(ref s) => write!(f, "function `{}` has no definition", s),
             RuntimeErrorKind::VariableNameMustBeSymbol(ref s) => write!(f, "cannot assign `{}` a value", s),
             RuntimeErrorKind::VariableNotFound(ref s) => write!(f, "cannot find variable `{}`", s),
+            RuntimeErrorKind::ReadFileArgumentMustBeString => write!(f, "`read-file` argument must be string"),
+            RuntimeErrorKind::ReadFileCouldntReadFile(ref path) => write!(f, "`read-file` couldn't sucessfully read file `{}`", path),
+            RuntimeErrorKind::ConcatArgMustBeByteVector => write!(f, "`concat` argument must be a byte vector"),
             RuntimeErrorKind::WrongNumberOfArguments(ref operator, found, target) =>
                 write!(f, "`{}`: wrong number of arguments, was {}, should be {}", operator, found, target),
         }

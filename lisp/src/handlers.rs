@@ -1,11 +1,24 @@
 use pest::Parser;
 use pest::iterators::{Pair, Pairs};
-use std::fmt;
+
+use std::{fmt, io};
 use std::collections::HashMap;
+use std::path::Path;
+use std::fs::File;
+use std::io::Read;
 
 use crate::scope::{FunctionContext, ContextVariables, MacroContext};
 use crate::error::{RuntimeError, RuntimeErrorKind, ParameterCount};
 use crate::span::Span;
+
+fn r#true(span: Span) -> Node {
+    Node { expression: Expression::Atom(Atom::Keyword(":true".to_string())), span }
+}
+
+fn r#false(span: Span) -> Node {
+    Node { expression: Expression::Atom(Atom::Keyword(":false".to_string())), span }
+}
+
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -92,14 +105,12 @@ impl fmt::Display for Handlers {
 
 #[derive(Debug, Clone)]
 pub struct Node {
-    span: Span,
-    expression: Expression,
+    pub span: Span,
+    pub expression: Expression,
 }
 
 impl Node {
     fn eval(&self, functions: &FunctionContext, variables: &ContextVariables, macros: Option<&MacroContext>) -> Result<Node, RuntimeError> {
-
-
         match self.expression {
             Expression::Pair(_) => Err(RuntimeError { kind: RuntimeErrorKind::CannotEvaluatePair, span: self.span }),
             Expression::Atom(ref atom) => {
@@ -183,10 +194,7 @@ impl Node {
                             "=" => {
                                 if args.len() == 2 {
                                     let equal = args[0].eval(functions, variables, macros)?.equal_ignore_span(&args[1].eval(functions, variables, macros)?);
-                                    Ok(Node {
-                                        expression: Expression::Atom(Atom::Keyword(if equal { ":true" } else { ":false" }.to_string())),
-                                        span: self.span
-                                    })
+                                    Ok(if equal { r#true(self.span) } else { r#false(self.span) })
                                 } else {
                                     Err(RuntimeError {
                                         kind: RuntimeErrorKind::WrongNumberOfArguments("=".to_string(), args.len(), ParameterCount::Exactly(2)),
@@ -195,12 +203,67 @@ impl Node {
                                 }
                             },
                             "print" => {
-                                for arg in args {
-                                    let result = arg.eval(functions, variables, macros)?;
+                                if args.len() == 1 {
+                                    let result = args[0].eval(functions, variables, macros)?;
                                     println!("{}", result);
+                                    Ok(result)
+                                } else {
+                                    Err(RuntimeError {
+                                        kind: RuntimeErrorKind::WrongNumberOfArguments("print".to_string(), args.len(), ParameterCount::Exactly(1)),
+                                        span: self.span
+                                    })
+                                }
+                            },
+                            "read-file" => {
+                                if args.len() == 1 {
+                                    match &args[0].eval(functions, variables, macros)? {
+                                        Node { expression: Expression::Atom(Atom::ByteVector(path_bytes)), .. } => {
+                                            match read_to_vec(&String::from_utf8_lossy(path_bytes).to_string()) {
+                                                Ok(bytes) => Ok(Node { expression: Expression::Atom(Atom::ByteVector(bytes)), span: self.span }),
+                                                Err(_) => Ok(Node { expression: Expression::Atom(Atom::Keyword(":file-not-found".to_string())), span: self.span }),
+                                            }
+                                        },
+                                        _ => Err(RuntimeError {
+                                            kind: RuntimeErrorKind::ReadFileArgumentMustBeString,
+                                            span: self.span
+                                        }),
+                                    }
+                                } else {
+                                    Err(RuntimeError {
+                                        kind: RuntimeErrorKind::WrongNumberOfArguments("read-file".to_string(), args.len(), ParameterCount::Exactly(1)),
+                                        span: self.span
+                                    })
+                                }
+                            },
+                            "concat" => {
+                                if args.len() == 2 {
+                                    match &args[0].eval(functions, variables, macros)? {
+                                        Node { expression: Expression::Atom(Atom::ByteVector(array_a)), .. } => {
+                                            match &args[1].eval(functions, variables, macros)? {
+                                                Node { expression: Expression::Atom(Atom::ByteVector(array_b)), .. } => {
+                                                    let mut ret = Vec::with_capacity(array_a.len()+array_b.len());
+                                                    ret.extend_from_slice(array_a);
+                                                    ret.extend_from_slice(array_b);
+                                                    Ok(Node { expression: Expression::Atom(Atom::ByteVector(ret)), span: self.span })
+                                                }
+                                                _ => Err(RuntimeError {
+                                                    kind: RuntimeErrorKind::ConcatArgMustBeByteVector,
+                                                    span: self.span
+                                                })
+                                            }
+                                        },
+                                        _ => Err(RuntimeError {
+                                            kind: RuntimeErrorKind::ConcatArgMustBeByteVector,
+                                            span: self.span
+                                        }),
+                                    }
+                                } else {
+                                    Err(RuntimeError {
+                                        kind: RuntimeErrorKind::WrongNumberOfArguments("concat".to_string(), args.len(), ParameterCount::Exactly(2)),
+                                        span: self.span
+                                    })
                                 }
 
-                                Ok(Node { expression: Expression::List(Vec::new()), span: self.span })
                             },
                             "quote" => {
                                 if args.len() == 1 {
@@ -271,6 +334,20 @@ impl Node {
                                     .collect::<Result<_, _>>()?;
 
                                 Ok(Node { expression: Expression::List(ret), span: self.span })
+                            },
+                            "byte-vector?" => {
+                                if args.len() == 1 {
+                                    match args[0].eval(functions, variables, macros)? {
+                                        Node { expression: Expression::Atom(Atom::ByteVector(_)), .. } => Ok(r#true(self.span)),
+                                        _ => Ok(r#false(self.span)),
+                                    }
+                                } else {
+                                    Err(RuntimeError {
+                                        kind: RuntimeErrorKind::WrongNumberOfArguments("byte-vector?".to_string(), args.len(), ParameterCount::Exactly(1)),
+                                        span: self.span
+                                    })
+
+                                }
                             },
                             "jsonify" => {
                                 todo!()
@@ -442,7 +519,7 @@ impl Atom {
         match a.as_rule() {
             Rule::number => Ok(Atom::Number(a.as_str().parse().map_err(|_| LispParseError::BadInteger)?)),
             Rule::keyword => Ok(Atom::Keyword(a.as_str().to_string())),
-            Rule::string => Ok(Atom::ByteVector(a.as_str().as_bytes()[1..a.as_str().len()-1].to_vec())),
+            Rule::string => Ok(Atom::ByteVector(parse_input_string(a.as_str()).ok_or(LispParseError::BadString)?)),
             Rule::symbol => Ok(Atom::Symbol(a.as_str().to_string())),
             _ => unreachable!(),
         }
@@ -453,6 +530,7 @@ impl Atom {
 pub enum LispParseError {
     PestError(pest::error::Error<Rule>),
     BadInteger,
+    BadString,
     AlreadyDeclared(Span),
     RuntimeErorr(RuntimeError),
 }
@@ -469,3 +547,51 @@ impl From<RuntimeError> for LispParseError {
     }
 }
 
+fn read_to_vec(name: impl AsRef<Path>) -> io::Result<Vec<u8>> {
+    let mut file = File::open(name)?;
+
+    let buf_size = file.metadata().map(|m| m.len() + 1).unwrap_or(0) as usize;
+
+    let mut buf = Vec::with_capacity(buf_size);
+
+    file.read_to_end(&mut buf)?;
+
+    Ok(buf)
+}
+
+fn parse_input_string(string: &str) -> Option<Vec<u8>> {
+    // naive implementation would be string.to_bytes(), but that wouldn't handle our string escapes!
+    // modified from our json crate ! you gotta love that code duplication
+    // but instead, this is sexy utf8 stuff
+
+    let mut ret = Vec::new();
+    let mut chars = string[1..string.len()-1].chars();
+
+    loop {
+        let c = match chars.next() {
+            Some(c) => c,
+            None => return Some(ret),
+        };
+
+        match c {
+            '"' => return None,
+            '\\' => match chars.next()? {
+                '"' => ret.push(b'"'),
+                '\\' => ret.push(b'\\'),
+                'n' => ret.push(b'\n'),
+                'r' => ret.push(b'\r'),
+                't' => ret.push(b'\t'),
+                'x' => {
+                    let nibble0 = u8::from_str_radix(chars.next()?.encode_utf8(&mut [0; 4]), 16).ok()?;
+                    let nibble1 = u8::from_str_radix(chars.next()?.encode_utf8(&mut [0; 4]), 16).ok()?;
+                    ret.push(nibble0 << 4 | nibble1);
+                },
+                _ => return None,
+            },
+            _ => {
+                let mut buf = [0; 4];
+                ret.extend_from_slice(c.encode_utf8(&mut buf).as_bytes())
+            },
+        }
+    }
+}
