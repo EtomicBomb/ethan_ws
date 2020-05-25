@@ -12,9 +12,10 @@ var size = 50;
 
 
 var socket = new WebSocket("ws://ethan.ws/filler");
-socket.onopen = function() {
-    socket.send("null"); // how we request a new game state
-};
+
+//socket.onopen = function() {
+//    socket.send("null"); // how we request a new game state
+//};
 
 socket.onmessage = function(msg) {
     gameState = JSON.parse(msg.data);
@@ -34,13 +35,7 @@ canvas.onclick = function(event) {
 
 function colorClicked(color) {
     console.log("clicked on "+color);
-
-    var toSend = JSON.stringify({
-                         state: gameState,
-                         move: color,
-                     });
-    console.log(toSend);
-    socket.send(toSend);
+    socket.send(color);
 }
 
 function display() {

@@ -3,21 +3,52 @@ use rand::distributions::{Distribution, Standard};
 
 use std::collections::{HashSet, HashMap};
 
+use crate::server_state::{StreamState, ClientId, WebsocketMessage};
 use crate::json::Json;
+use crate::websocket_apps::{WebSocketClientState, write_string_to};
+use std::net::TcpStream;
+use crate::websocket_apps::tanks::GlobalTanksGameState;
+
+
+pub struct FillerClientState {
+    our_id: ClientId,
+    game_state: GameState,
+}
+
+impl FillerClientState {
+    pub fn new(id: ClientId, _database: &mut HashMap<String, String>, writers: &mut HashMap<ClientId, TcpStream>) -> FillerClientState {
+        let game_state = GameState::new();
+
+        write_string_to(id, game_state.jsonify().to_string(), writers);
+
+        FillerClientState { our_id: id, game_state }
+    }
+}
+
+
+impl WebSocketClientState for FillerClientState {
+    fn on_receive_message(&mut self, _database: &mut HashMap<String, String>, _tank_state: &mut GlobalTanksGameState, writers: &mut HashMap<ClientId, TcpStream>, message: WebsocketMessage) -> StreamState {
+        let color_string = if let WebsocketMessage::Text(message) = message { message } else { return StreamState::Drop };
+
+        match handle_request(&mut self.game_state, &color_string) {
+            Some(reply) => write_string_to(self.our_id, reply.to_string(), writers),
+            None => StreamState::Drop,
+        }
+    }
+    fn on_socket_close(&mut self, _database: &mut HashMap<String, String>, _tank_state: &mut GlobalTanksGameState, _writers: &mut HashMap<ClientId, TcpStream>) {}
+
+}
+
+
 
 const WIDTH: usize = 8;
 const HEIGHT: usize = 7;
 const N_COLORS: u8 = 6;
 const DEPTH: usize = 4;
 
-pub fn new_game_state() -> Json {
-    GameState::new().jsonify()
-}
 
-pub fn handle_request(json: &Json) -> Option<Json> {
-    let request = json.get_object()?;
-    let mut game_state = GameState::from_json(request.get("state")?)?;
-    let color_chosen = Color::from_json(request.get("move")?)?;
+pub fn handle_request(game_state: &mut GameState, color_string: &str) -> Option<Json> {
+    let color_chosen = Color::from_string(color_string)?;
 
     game_state.do_move(color_chosen).ok()?;
 
@@ -59,7 +90,7 @@ fn max_advantage(game_state: GameState, is_left: bool, is_our_turn: bool, depth_
 
 
 #[derive(Clone)]
-struct GameState {
+pub struct GameState {
     field: Field,
     left_territory: HashSet<(usize, usize)>,
     right_territory: HashSet<(usize, usize)>,
@@ -67,7 +98,7 @@ struct GameState {
 }
 
 impl GameState {
-    pub fn new() -> GameState {
+    fn new() -> GameState {
         GameState {
             field: Field::from_random(),
             left_territory: vec![(0, HEIGHT-1)].into_iter().collect(),
@@ -76,7 +107,7 @@ impl GameState {
         }
     }
 
-    pub fn get_colors(&self) -> Vec<Color> {
+    fn get_colors(&self) -> Vec<Color> {
         let reasonable = self.reasonable_colors();
 
         if reasonable.is_empty() {
@@ -125,30 +156,7 @@ impl GameState {
         Json::Object(map)
     }
 
-    pub fn from_json(json: &Json) -> Option<GameState> {
-        let map = json.get_object()?;
-
-        let field = Field::from_json(map.get("field")?)?;
-        let left_territory = map.get("leftTerritory")?.get_array()?.iter()
-            .map(|point_json| {
-                let point = point_json.get_object()?;
-                Some((point.get("x")?.get_number()? as usize, point.get("y")?.get_number()? as usize))
-            })
-            .collect::<Option<_>>()?;
-
-        let right_territory = map.get("rightTerritory")?.get_array()?.iter()
-            .map(|point_json| {
-                let point = point_json.get_object()?;
-                Some((point.get("x")?.get_number()? as usize, point.get("y")?.get_number()? as usize))
-            })
-            .collect::<Option<_>>()?;
-
-        let is_left_turn = map.get("isLeftTurn")?.get_bool()?;
-
-        Some(GameState { field, left_territory, right_territory, is_left_turn })
-    }
-
-    pub fn reasonable_colors(&self) -> HashSet<Color> {
+    fn reasonable_colors(&self) -> HashSet<Color> {
         let territory =
             if self.is_left_turn {
                 &self.left_territory
@@ -182,7 +190,7 @@ impl GameState {
         self.field.get(x, y).unwrap()
     }
 
-    pub fn valid_colors(&self) -> [Color; 4] {
+    fn valid_colors(&self) -> [Color; 4] {
         let mut ret = [Color::Black; 4];
         let mut index = 0;
 
@@ -197,20 +205,11 @@ impl GameState {
         ret
     }
 
-    pub fn is_over(&self) -> bool {
-        self.left_territory.len() + self.right_territory.len() == WIDTH * HEIGHT
-    }
-
-    pub fn left_advantage(&self) -> isize {
+    fn left_advantage(&self) -> isize {
         self.left_territory.len() as isize - self.right_territory.len() as isize
     }
 
-    pub fn left_winning(&self) -> bool {
-        // only call if is over
-        self.left_advantage() > 0
-    }
-
-    pub fn do_move(&mut self, fill_color: Color) -> Result<(), ()> {
+    fn do_move(&mut self, fill_color: Color) -> Result<(), ()> {
         // check if fill_color is valid (ie. not our or opponents current color)
         if fill_color == self.left_color() || fill_color == self.right_color() {
             return Err(());
@@ -284,8 +283,8 @@ impl Color {
         }
     }
 
-    fn from_json(json: &Json) -> Option<Color> {
-        Some(match json.get_string()? {
+    fn from_string(string: &str) -> Option<Color> {
+        Some(match string {
             "red" => Color::Red,
             "yellow" => Color::Yellow,
             "green" => Color::Green,
@@ -319,18 +318,6 @@ impl Field {
                     Json::Array(row.iter().map(|color| color.jsonify()).collect::<Vec<Json>>()))
                 .collect::<Vec<Json>>()
         )
-    }
-
-    pub fn from_json(json: &Json) -> Option<Field> {
-        let mut inner = [[Color::Black; WIDTH]; HEIGHT];
-
-        for (y, rows) in json.get_array()?.iter().enumerate() {
-            for (x, color) in rows.get_array()?.iter().enumerate() {
-                *inner.get_mut(y)?.get_mut(x)? = Color::from_json(color)?;
-            }
-        }
-
-        Some(Field { inner })
     }
 
     pub fn from_random() -> Field {
@@ -370,17 +357,5 @@ impl Field {
 
     pub fn set(&mut self, x: usize, y: usize, color: Color) {
         self.inner[y][x] = color;
-    }
-
-    pub fn rotate(&self) -> Field {
-        let mut new_inner = [[Color::Black; WIDTH]; HEIGHT];
-
-        for y in 0..HEIGHT {
-            for x in 0..WIDTH {
-                new_inner[y][x] = self.inner[HEIGHT-y-1][WIDTH-x-1];
-            }
-        }
-
-        Field { inner: new_inner }
     }
 }

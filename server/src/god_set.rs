@@ -1,14 +1,15 @@
 use crate::json::Json;
 use std::io::{BufReader, BufRead};
+use std::fs::File;
 use crate::GOD_SET_PATH;
 
 pub struct GodSet {
-    json: Vec<u8>,
+    json: String,
 }
 
 impl GodSet {
     pub fn new() -> Option<GodSet> {
-        let file = BufReader::new(std::fs::File::open(GOD_SET_PATH).ok()?);
+        let file = BufReader::new(File::open(GOD_SET_PATH).ok()?);
 
         let json = Json::Array(file.lines()
             .map(|line| {
@@ -34,10 +35,22 @@ impl GodSet {
             })
             .collect::<Option<Vec<Json>>>()?);
 
-        Some(GodSet { json: json.to_string().into_bytes() })
+        Some(GodSet { json: json.to_string() })
     }
 
-    pub fn raw_bytes(&self) -> Vec<u8> {
+    pub fn cool_vector() -> Option<Vec<(String, String)>> {
+        let file = BufReader::new(File::open(GOD_SET_PATH).ok()?);
+
+        file.lines()
+            .map(|line| {
+                let line = line.ok()?;
+                let split: Vec<_> = line.trim_end().split("\t").collect();
+                if split.len() != 7 { return None }
+                Some((split[5].to_string(), split[6].to_string()))
+            }).collect::<Option<_>>()
+    }
+
+    pub fn stringify(&self) -> String {
         self.json.clone()
     }
 

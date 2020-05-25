@@ -2,10 +2,10 @@ var socket = new WebSocket("ws://ethan.ws/godset"); // http is boomer stuff
 
 var godset = [];
 
-socket.onopen = function() {
-    console.log("opened");
-    socket.send("godset"); // the ultimate websocket message
-};
+//socket.onopen = function() {
+//    console.log("opened");
+//    socket.send("godset"); // the ultimate websocket message
+//};
 
 socket.onmessage = function(msg) {
     socket.close();

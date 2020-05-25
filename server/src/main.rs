@@ -12,11 +12,11 @@ use std::str::FromStr;
 use std::thread;
 use std::sync::{Arc, Mutex};
 
+mod websocket_apps;
 mod base64;
 mod server_state;
 mod http_handler;
 mod god_set;
-mod filler;
 #[macro_use]
 mod log;
 
@@ -37,7 +37,7 @@ fn main() -> io::Result<()> {
 
     log!("server started");
 
-    let handle = thread::Builder::new().name(String::from("ethan_ws_listener")).spawn(move || {
+    let handle = thread::Builder::new().name(String::from("server_listener")).spawn(move || {
         for stream in TcpListener::bind("0.0.0.0:8080").expect("couldnt bind").incoming() {
             if let Ok(stream) = stream {
                 handle_new_connection(stream, Arc::clone(&cloned_state));
@@ -76,7 +76,7 @@ fn handle_new_connection(stream: TcpStream, state: Arc<Mutex<ServerState>>) {
     // let (mut stream_reader, stream_writer) = split(stream);
     let id = state.lock().unwrap().new_connection_handler(stream_writer);
 
-    thread::Builder::new().name(format!("ethan_ws{}", id)).spawn(move ||{
+    thread::Builder::new().name(format!("server{}", id)).spawn(move ||{
         let mut buf = [0u8; MAX_HTTP_REQUEST_SIZE];
         if let Ok(len) = stream_reader.read(&mut buf) {
             if let Ok(request) = HttpRequest::from_str(&String::from_utf8_lossy(&buf[0..len])) {
