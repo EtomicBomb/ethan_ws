@@ -15,5 +15,5 @@ rand = "0.7.3"
 
 json = { path = "../json" }
 lisp = { path = "../lisp" }
-websocket = { path = "../websocket" }
+web_socket = { path = "../web_socket" }
 http = { path = "../http" }

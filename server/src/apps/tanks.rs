@@ -3,13 +3,15 @@ use std::net::TcpStream;
 use std::time::{UNIX_EPOCH, SystemTime};
 use rand::{thread_rng, Rng, random};
 
-use crate::log;
-use crate::websocket_apps::{WebSocketClientState, write_string_to};
-use crate::server_state::{StreamState, WebsocketMessage, ClientId};
+use crate::{log, GOD_SET_PATH};
+use crate::apps::{GlobalState, PeerId, write_text};
+use crate::server_state::{StreamState};
 use json::Json;
 use std::str::FromStr;
-use crate::god_set::GodSet;
 use rand::seq::SliceRandom;
+use web_socket::WebSocketMessage;
+use std::fs::File;
+use std::io::{BufReader, BufRead};
 
 const MAP_WIDTH: f64 = 500.0;
 const MAP_HEIGHT: f64 = 500.0;
@@ -19,59 +21,49 @@ const PLAYER_VELOCITY: f64 = 0.04;
 const PLAYER_RADIUS: f64 = 10.0;
 const LASER_DURATION_MILLIS: f64 = 300.0;
 
-pub struct TanksClientState {
-    id: ClientId,
+pub struct TanksGlobalState {
+    last_updated: u64, // our last updated time
+    stars_json: Json,
+    players: HashMap<PeerId, PlayerInfo>,
+    questions: Vec<(String, String)>,
+    lasers: Vec<Laser>, // x, y, facing
 }
 
-impl TanksClientState {
-    pub fn new(id: ClientId, _database: &mut HashMap<String, String>, tank_state: &mut GlobalTanksGameState, writers: &mut HashMap<ClientId, TcpStream>) -> TanksClientState {
-        // create a new entry in our database
-
-        tank_state.new_player(id);
-
-        for other in writers.keys().cloned().filter(|&k| tank_state.has_player(k)).collect::<Vec<ClientId>>() {
-            write_string_to(other, tank_state.game_state_message_to(other).to_string(), writers);
-        }
-
-        TanksClientState { id }
+impl GlobalState for TanksGlobalState {
+    fn new_peer(&mut self, id: PeerId, tcp_stream: TcpStream) {
+        self.new_player(id, tcp_stream);
+        self.announce();
     }
-}
-
-impl WebSocketClientState for TanksClientState {
-    fn on_receive_message(&mut self, _database: &mut HashMap<String, String>, tank_state: &mut GlobalTanksGameState, writers: &mut HashMap<ClientId, TcpStream>, message: WebsocketMessage) -> StreamState {
-        match do_stuff(self.id, writers, tank_state, message) {
+    
+    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> StreamState {
+        let result = match helper(self, id, message) {
             Some(_) => StreamState::Keep,
-            None => StreamState::Drop,
-        }
-    }
-    fn on_socket_close(&mut self, _database: &mut HashMap<String, String>, tank_state: &mut GlobalTanksGameState, writers: &mut HashMap<ClientId, TcpStream>) {
-        tank_state.remove_player(self.id);
+            None => {
+                self.remove_player(id);
+                StreamState::Drop
+            },
+        };
 
-        for other in writers.keys().cloned().filter(|&k| tank_state.has_player(k)).collect::<Vec<ClientId>>() {
-            write_string_to(other, tank_state.game_state_message_to(other).to_string(), writers);
-        }
+        result
     }
+    
+    fn periodic(&mut self) { }
 }
 
-fn do_stuff(id: ClientId, writers: &mut HashMap<ClientId, TcpStream>, tank_state: &mut GlobalTanksGameState, message: WebsocketMessage) -> Option<()> {
+fn helper(global: &mut TanksGlobalState, id: PeerId, message: WebSocketMessage) -> Option<()> {
     let a = Json::from_str(message.get_text()?).ok()?;
     let map = a.get_object()?;
 
     match map.get("kind")?.get_string()? {
         "updateFacing" => {
-            tank_state.update_facing(id, map.get("newFacing")?.get_number()?);
+            global.update_facing(id, map.get("newFacing")?.get_number()?);
 
-            for other in writers.keys().cloned().filter(|&k| tank_state.has_player(k)).collect::<Vec<ClientId>>() {
-                write_string_to(other, tank_state.game_state_message_to(other).to_string(), writers);
-            }
-
+            global.announce();
             Some(())
         },
         "guess" => {
-            if tank_state.guessed_correctly(id, map.get("guessIsLeft")?.get_bool()?) {
-                for other in writers.keys().cloned().filter(|&k| tank_state.has_player(k)).collect::<Vec<ClientId>>() {
-                    write_string_to(other, tank_state.game_state_message_to(other).to_string(), writers);
-                }
+            if global.guessed_correctly(id, map.get("guessIsLeft")?.get_bool()?) {
+                global.announce();
 
                 Some(())
             } else {
@@ -80,11 +72,8 @@ fn do_stuff(id: ClientId, writers: &mut HashMap<ClientId, TcpStream>, tank_state
         },
         "fire" => {
             // boom bam bop
-            tank_state.shoot_laser(id);
-
-            for other in writers.keys().cloned().filter(|&k| tank_state.has_player(k)).collect::<Vec<ClientId>>() {
-                write_string_to(other, tank_state.game_state_message_to(other).to_string(), writers);
-            }
+            global.shoot_laser(id);
+            global.announce();
 
             Some(())
         },
@@ -92,24 +81,8 @@ fn do_stuff(id: ClientId, writers: &mut HashMap<ClientId, TcpStream>, tank_state
     }
 }
 
-fn intersect_circle(circle_x: f64, circle_y: f64, radius: f64, ray_x: f64, ray_y: f64, ray_angle: f64) -> bool {
-    let b = circle_y * ray_angle.sin() - circle_x * ray_angle.cos() + ray_x * ray_angle.cos() - ray_y * ray_angle.sin();
-    let discriminant = b*b - ray_x * ray_x - ray_y * ray_y + 2.0* circle_x * ray_x + 2.0* circle_y * ray_y - circle_y * circle_y - circle_x * circle_x + radius * radius;
-
-    discriminant >= 0.0 && -b+discriminant.sqrt() >= 0.0
-}
-
-
-pub struct GlobalTanksGameState {
-    last_updated: u64, // our last updated time
-    stars_json: Json,
-    players: HashMap<ClientId, PlayerInfo>,
-    questions: Vec<(String, String)>,
-    lasers: Vec<Laser>, // x, y, facing
-}
-
-impl GlobalTanksGameState {
-    pub fn new() -> GlobalTanksGameState {
+impl TanksGlobalState {
+    pub fn new() -> TanksGlobalState {
         let stars: Vec<_> =  (0..NUM_STARS)
             .map(|_| (thread_rng().gen_range(0.0, MAP_WIDTH as f64), thread_rng().gen_range(0.0, MAP_HEIGHT as f64)))
             .collect();
@@ -123,7 +96,7 @@ impl GlobalTanksGameState {
             })
             .collect());
 
-        let questions = match GodSet::cool_vector() {
+        let questions = match cool_vector() {
             Some(questions) if !questions.is_empty() => questions,
             _ => {
                 log!("couldn't read questions file");
@@ -131,7 +104,7 @@ impl GlobalTanksGameState {
             },
         };
 
-        GlobalTanksGameState {
+        TanksGlobalState {
             last_updated: unix_time_millis(),
             stars_json,
             questions,
@@ -140,20 +113,24 @@ impl GlobalTanksGameState {
         }
     }
 
-    fn has_player(&self, id: ClientId) -> bool {
-        self.players.contains_key(&id)
+    fn announce(&mut self) {
+        for id in self.players.keys().cloned().collect::<Vec<PeerId>>() {
+            let message = self.game_state_message_to(id).to_string();
+            let mut stream = &mut self.players.get_mut(&id).unwrap().tcp_stream;
+            write_text(&mut stream, message);
+        }
     }
 
-    fn new_player(&mut self, id: ClientId) {
-        self.players.insert(id, PlayerInfo::from_random(&self.questions));
+    fn new_player(&mut self, id: PeerId, tcp_stream: TcpStream) {
+        self.players.insert(id, PlayerInfo::from_random(&self.questions, tcp_stream));
     }
 
-    fn remove_player(&mut self, id: ClientId) {
+    fn remove_player(&mut self, id: PeerId) {
         // bye bye!
         self.players.remove(&id);
     }
 
-    fn guessed_correctly(&mut self, id: ClientId, guess_is_left: bool) -> bool {
+    fn guessed_correctly(&mut self, id: PeerId, guess_is_left: bool) -> bool {
         let player = self.players.get_mut(&id).unwrap();
 
         let was_correct = player.question.guess(guess_is_left);
@@ -163,7 +140,7 @@ impl GlobalTanksGameState {
         was_correct
     }
 
-    fn shoot_laser(&mut self, id: ClientId) {
+    fn shoot_laser(&mut self, id: PeerId) {
         self.update();
 
         let a = self.players.get_mut(&id).unwrap();
@@ -176,20 +153,20 @@ impl GlobalTanksGameState {
 
         for (_, other) in self.players.iter_mut().filter(|&(&other_id, _)| other_id != id) {
             if intersect_circle(other.x, other.y, PLAYER_RADIUS, ray_x, ray_y, facing) {
-                 if other.shield > 0 { other.shield -= 1 }
+                if other.shield > 0 { other.shield -= 1 }
             }
         }
 
         self.lasers.push(Laser { x: ray_x, y: ray_y, facing, expire: self.last_updated as f64 + LASER_DURATION_MILLIS })
     }
 
-    fn update_facing(&mut self, id: ClientId, new_facing: f64) {
+    fn update_facing(&mut self, id: PeerId, new_facing: f64) {
         // where are they now?
         self.update();
         self.players.get_mut(&id).unwrap().facing = new_facing;
     }
 
-    fn game_state_message_to(&self, receiver: ClientId) -> Json {
+    fn game_state_message_to(&self, receiver: PeerId) -> Json {
         // contains:
         //      a number called `time` that stores the time that x and y were last valid
         //      an array called `stars` each element with an x and y
@@ -207,8 +184,6 @@ impl GlobalTanksGameState {
                 Json::Object(map)
             })
             .collect());
-
-
 
         let question = &self.players[&receiver].question;
         let mut question_map = HashMap::new();
@@ -247,6 +222,17 @@ impl GlobalTanksGameState {
 }
 
 
+
+
+fn intersect_circle(circle_x: f64, circle_y: f64, radius: f64, ray_x: f64, ray_y: f64, ray_angle: f64) -> bool {
+    let b = circle_y * ray_angle.sin() - circle_x * ray_angle.cos() + ray_x * ray_angle.cos() - ray_y * ray_angle.sin();
+    let discriminant = b*b - ray_x * ray_x - ray_y * ray_y + 2.0* circle_x * ray_x + 2.0* circle_y * ray_y - circle_y * circle_y - circle_x * circle_x + radius * radius;
+
+    discriminant >= 0.0 && -b+discriminant.sqrt() >= 0.0
+}
+
+
+
 struct Laser {
     x: f64,
     y: f64,
@@ -254,7 +240,7 @@ struct Laser {
     expire: f64,
 }
 
-#[derive(Clone)]
+#[derive(Debug)]
 struct PlayerInfo {
     x: f64,
     y: f64,
@@ -262,12 +248,13 @@ struct PlayerInfo {
     color: String,
     shield: usize,
     question: Question,
+    tcp_stream: TcpStream,
 }
 
 
 
 impl PlayerInfo {
-    fn from_random(questions: &[(String, String)]) -> PlayerInfo {
+    fn from_random(questions: &[(String, String)], tcp_stream: TcpStream) -> PlayerInfo {
         PlayerInfo {
             x: thread_rng().gen_range(0.0, MAP_WIDTH as f64),
             y: thread_rng().gen_range(0.0, MAP_HEIGHT as f64),
@@ -275,6 +262,7 @@ impl PlayerInfo {
             color: format!("rgb({},{},{})", random::<u8>(), random::<u8>(), random::<u8>()),
             shield: 0,
             question: Question::new(questions),
+            tcp_stream,
         }
     }
 
@@ -298,7 +286,7 @@ impl PlayerInfo {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Question {
     definition: String,
     left: String,
@@ -338,6 +326,18 @@ fn wrap(mut n: f64, range: f64) -> f64 {
     n %= range;
     if n < 0.0 { n += range }
     n
+}
+
+fn cool_vector() -> Option<Vec<(String, String)>> {
+    let file = BufReader::new(File::open(GOD_SET_PATH).ok()?);
+
+    file.lines()
+        .map(|line| {
+            let line = line.ok()?;
+            let split: Vec<_> = line.trim_end().split("\t").collect();
+            if split.len() != 7 { return None }
+            Some((split[5].to_string(), split[6].to_string()))
+        }).collect::<Option<_>>()
 }
 
 fn unix_time_millis() -> u64 {

@@ -11,7 +11,7 @@ use crate::{ServerError, RESOURCES_ROOT};
 const ERROR_404_RESPONSE: &'static [u8] = b"HTTP/1.1 404 Page Not Found\r\n\r\n<!DOCTYPE html><html lang='en-US'><head><meta charset='UTF-8'><title>ethan.ws</title></head><body><h1>Error 404 - Page Not Found</h1></body></html>";
 const ERROR_500_RESPONSE: &'static [u8] = b"HTTP/1.1 500 Internal Server Error\r\n\r\n<!DOCTYPE html><html lang='en-US'><head><meta charset='UTF-8'><title>ethan.ws</title></head><body><h1>Error 500 - Internal Server Error</h1></body></html>";
 
-pub fn get_response_to_http(request: &HttpRequest, writer: &mut TcpStream) -> Result<(), ServerError> {
+pub fn send_resource(request: &HttpRequest, writer: &mut TcpStream) -> Result<(), ServerError> {
     match get_data(request.resource_location()) {
         Ok(data) => {
             writer.write_all(b"HTTP/1.1 200 OK\r\n\r\n")?;

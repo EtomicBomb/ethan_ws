@@ -2,43 +2,13 @@ use rand::{Rng, random};
 use rand::distributions::{Distribution, Standard};
 
 use std::collections::{HashSet, HashMap};
-
-use crate::server_state::{StreamState, ClientId, WebsocketMessage};
-use crate::json::Json;
-use crate::websocket_apps::{WebSocketClientState, write_string_to};
 use std::net::TcpStream;
-use crate::websocket_apps::tanks::GlobalTanksGameState;
 
+use web_socket::{WebSocketMessage};
+use json::Json;
 
-pub struct FillerClientState {
-    our_id: ClientId,
-    game_state: GameState,
-}
-
-impl FillerClientState {
-    pub fn new(id: ClientId, _database: &mut HashMap<String, String>, writers: &mut HashMap<ClientId, TcpStream>) -> FillerClientState {
-        let game_state = GameState::new();
-
-        write_string_to(id, game_state.jsonify().to_string(), writers);
-
-        FillerClientState { our_id: id, game_state }
-    }
-}
-
-
-impl WebSocketClientState for FillerClientState {
-    fn on_receive_message(&mut self, _database: &mut HashMap<String, String>, _tank_state: &mut GlobalTanksGameState, writers: &mut HashMap<ClientId, TcpStream>, message: WebsocketMessage) -> StreamState {
-        let color_string = if let WebsocketMessage::Text(message) = message { message } else { return StreamState::Drop };
-
-        match handle_request(&mut self.game_state, &color_string) {
-            Some(reply) => write_string_to(self.our_id, reply.to_string(), writers),
-            None => StreamState::Drop,
-        }
-    }
-    fn on_socket_close(&mut self, _database: &mut HashMap<String, String>, _tank_state: &mut GlobalTanksGameState, _writers: &mut HashMap<ClientId, TcpStream>) {}
-
-}
-
+use crate::server_state::{StreamState};
+use crate::apps::{PeerId, GlobalState, write_text};
 
 
 const WIDTH: usize = 8;
@@ -47,8 +17,46 @@ const N_COLORS: u8 = 6;
 const DEPTH: usize = 4;
 
 
-pub fn handle_request(game_state: &mut GameState, color_string: &str) -> Option<Json> {
-    let color_chosen = Color::from_string(color_string)?;
+pub struct FillerGlobalState {
+    active_players: HashMap<PeerId, (GameState, TcpStream)>,
+}
+
+
+impl FillerGlobalState {
+    pub fn new() -> FillerGlobalState {
+        FillerGlobalState { active_players: HashMap::new() }
+    }
+}
+
+impl GlobalState for FillerGlobalState {
+    fn new_peer(&mut self, id: PeerId, tcp_stream: TcpStream) {
+        self.active_players.insert(id, (GameState::new(), tcp_stream));
+        let player = self.active_players.get_mut(&id).unwrap();
+        write_text(&mut player.1, player.0.jsonify().to_string());
+    }
+
+    fn on_message_receive(&mut self, from: PeerId, message: WebSocketMessage) -> StreamState {
+        dbg!();
+        let player = self.active_players.get_mut(&from).unwrap();
+
+        let ret = match handle_request(&mut player.0, message) {
+            Some(reply) => write_text(&mut player.1, reply.to_string()),
+            None => StreamState::Drop,
+        };
+
+        if ret == StreamState::Drop {
+            self.active_players.remove(&from);
+        }
+
+        ret
+    }
+
+    fn periodic(&mut self) { }
+}
+
+
+pub fn handle_request(game_state: &mut GameState, message: WebSocketMessage) -> Option<Json> {
+    let color_chosen = Color::from_string(message.get_text()?)?;
 
     game_state.do_move(color_chosen).ok()?;
 

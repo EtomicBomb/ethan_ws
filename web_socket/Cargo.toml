@@ -1,5 +1,5 @@
 [package]
-name = "websocket"
+name = "web_socket"
 version = "0.1.0"
 authors = ["EtomicBomb"]
 edition = "2018"
