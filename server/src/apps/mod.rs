@@ -8,7 +8,6 @@ mod filler;
 mod god_set;
 mod tanks;
 
-
 use std::sync::{Arc, Mutex};
 use std::thread;
 use crate::apps::filler::FillerGlobalState;

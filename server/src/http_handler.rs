@@ -1,23 +1,24 @@
 use http::HttpRequest;
 
 use std::path::{Path, PathBuf};
-use std::io::{self, Write, Read};
+use std::io::{self, Write, Read, ErrorKind};
 use std::fs::{File};
 use std::net::TcpStream;
 
-use crate::{ServerError, RESOURCES_ROOT};
+use crate::RESOURCES_ROOT;
 
 // hardcoded error messages
 const ERROR_404_RESPONSE: &'static [u8] = b"HTTP/1.1 404 Page Not Found\r\n\r\n<!DOCTYPE html><html lang='en-US'><head><meta charset='UTF-8'><title>ethan.ws</title></head><body><h1>Error 404 - Page Not Found</h1></body></html>";
 const ERROR_500_RESPONSE: &'static [u8] = b"HTTP/1.1 500 Internal Server Error\r\n\r\n<!DOCTYPE html><html lang='en-US'><head><meta charset='UTF-8'><title>ethan.ws</title></head><body><h1>Error 500 - Internal Server Error</h1></body></html>";
 
-pub fn send_resource(request: &HttpRequest, writer: &mut TcpStream) -> Result<(), ServerError> {
+pub fn send_resource(request: &HttpRequest, writer: &mut TcpStream) -> io::Result<()> {
     match get_data(request.resource_location()) {
         Ok(data) => {
             writer.write_all(b"HTTP/1.1 200 OK\r\n\r\n")?;
             writer.write_all(&data)?;
         },
-        Err(ServerError::ResourceNotFound) => writer.write_all(ERROR_404_RESPONSE)?,
+        Err(e) if e.kind() == ErrorKind::PermissionDenied || e.kind() == ErrorKind::NotFound =>
+            writer.write_all(ERROR_404_RESPONSE)?,
         Err(_) => writer.write_all(ERROR_500_RESPONSE)?,
     }
 
@@ -27,12 +28,12 @@ pub fn send_resource(request: &HttpRequest, writer: &mut TcpStream) -> Result<()
 }
 
 
-fn get_data(request: &str) -> Result<Vec<u8>, ServerError> {
+fn get_data(request: &str) -> io::Result<Vec<u8>> {
     let request =
         if request.starts_with("/") {
             &request[1..]
         } else {
-            return Err(ServerError::MalformedRequest);
+            return Err(io::ErrorKind::InvalidInput.into());
         };
 
     let mut path = PathBuf::from(RESOURCES_ROOT);
@@ -45,7 +46,7 @@ fn get_data(request: &str) -> Result<Vec<u8>, ServerError> {
     }
 
     if !is_to_resources_folder(&path) {
-        return Err(ServerError::PathOutsideResources);
+        return Err(io::ErrorKind::PermissionDenied.into());
     }
 
     Ok(read_to_vec(path)?)

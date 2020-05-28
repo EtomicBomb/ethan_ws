@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use std::time::{UNIX_EPOCH, SystemTime};
 use rand::{thread_rng, Rng, random};
 
-use crate::{log, GOD_SET_PATH};
+use crate::{GOD_SET_PATH};
 use crate::apps::{GlobalState, PeerId, write_text, StreamState};
 use json::Json;
 use std::str::FromStr;
@@ -66,10 +66,7 @@ impl TanksGlobalState {
 
         let questions = match cool_vector() {
             Some(questions) if !questions.is_empty() => questions,
-            _ => {
-                log!("couldn't read questions file");
-                panic!("couldn't read questions file");
-            },
+            _ => panic!("couldn't read questions file"),
         };
 
         TanksGlobalState {
@@ -353,11 +350,8 @@ fn cool_vector() -> Option<Vec<(String, String)>> {
 }
 
 fn unix_time_millis() -> u64 {
-    match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(duration) => duration.as_millis() as u64,
-        Err(_) => {
-            log!("clock read failed");
-            panic!("clock read failed");
-        }
-    }
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock read failed")
+        .as_millis() as u64
 }

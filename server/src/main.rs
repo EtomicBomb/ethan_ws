@@ -11,20 +11,17 @@ use std::thread;
 use std::sync::{Arc};
 
 mod apps;
-mod base64;
+mod util;
 mod http_handler;
-#[macro_use]
-mod log;
 
 use crate::http_handler::send_resource;
-use crate::base64::to_base64;
+use crate::util::to_base64;
 use sha1::Sha1;
 use crate::apps::{CoolStuff};
 use std::time::Duration;
 
 const MAX_HTTP_REQUEST_SIZE: usize = 2048;
 const RESOURCES_ROOT: &'static str = "/home/pi/Desktop/server/resources";
-const LOG_FILE_PATH: &'static str = "/home/pi/Desktop/server/log.txt";
 const GOD_SET_PATH: &'static str = "/home/pi/Desktop/server/resources/apush/godset.txt";
 
 const WEBSOCKET_SECURE_KEY_MAGIC_NUMBER: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -36,15 +33,11 @@ const PERIOD_LENGTH: Duration = Duration::from_millis(100);
 fn main() -> io::Result<()> {
     let global = Arc::new(CoolStuff::new().unwrap());
 
-    log!("server started");
-
     let global_listener = Arc::clone(&global);
     let listener = thread::Builder::new().name("server_listener".into()).spawn(move || {
         for (request, tcp_stream) in HttpIterator::new(8080, MAX_HTTP_REQUEST_SIZE).unwrap() {
             foo(request, tcp_stream, &global_listener);
         }
-
-        dbg!();
     }).unwrap();
 
 
@@ -71,24 +64,6 @@ fn foo(request: HttpRequest, mut tcp_stream: TcpStream, global: &Arc<CoolStuff>)
         None => { // that wasn't a WebSocket request !
             let _ = send_resource(&request, &mut tcp_stream);
         },
-    }
-}
-
-
-#[derive(Debug)]
-pub enum ServerError {
-    IoError(io::Error),
-    MalformedRequest,
-    ResourceNotFound,
-    PathOutsideResources,
-}
-
-impl From<io::Error> for ServerError {
-    fn from(error: io::Error) -> ServerError {
-        match error.kind() {
-            io::ErrorKind::NotFound | io::ErrorKind::PermissionDenied => ServerError::ResourceNotFound,
-            _ => ServerError::IoError(error),
-        }
     }
 }
 
