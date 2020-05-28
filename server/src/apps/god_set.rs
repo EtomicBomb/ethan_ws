@@ -18,6 +18,8 @@ impl GodSetGlobalState {
             .map(|line| {
                 let line = line.ok()?;
                 let mut split = line.trim_end().split("\t");
+                let _chapter = split.next()?;
+                let _section = split.next()?;
                 let year_start: u16 = split.next()?.parse().ok()?;
                 let year_end: u16 = split.next()?.parse().ok()?;
                 let social: bool = split.next()?.parse().ok()?;

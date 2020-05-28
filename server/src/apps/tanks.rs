@@ -344,8 +344,8 @@ fn cool_vector() -> Option<Vec<(String, String)>> {
         .map(|line| {
             let line = line.ok()?;
             let split: Vec<_> = line.trim_end().split("\t").collect();
-            if split.len() != 7 { return None }
-            Some((split[5].to_string(), split[6].to_string()))
+            if split.len() != 9 { return None }
+            Some((split[7].to_string(), split[8].to_string()))
         }).collect::<Option<_>>()
 }
 

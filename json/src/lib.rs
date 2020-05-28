@@ -178,7 +178,7 @@ fn into_json_string(s: &str) -> String {
 
     for c in s.chars() {
         match c {
-            '"' => ret.push_str("\""),
+            '"' => ret.push_str("\\\""),
             '\\' => ret.push_str("\\\\"),
             '\x08' => ret.push_str("\\b"),
             '\x0c' => ret.push_str("\\f"),
