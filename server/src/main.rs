@@ -12,11 +12,9 @@ use std::sync::{Arc};
 
 mod apps;
 mod base64;
-mod server_state;
 mod http_handler;
 #[macro_use]
 mod log;
-mod state;
 
 use crate::http_handler::send_resource;
 use crate::base64::to_base64;
@@ -77,8 +75,6 @@ fn foo(request: HttpRequest, mut tcp_stream: TcpStream, global: &Arc<CoolStuff>)
 }
 
 
-
-
 #[derive(Debug)]
 pub enum ServerError {
     IoError(io::Error),
@@ -112,46 +108,3 @@ fn try_upgrade_connection(request: &HttpRequest) -> Option<String> {
         None
     }
 }
-
-
-//
-// fn handle_new_connection(socket: TcpStream, state: Arc<GlobalStates>) {
-//     let mut stream_reader = socket.try_clone().unwrap();
-//
-//     let mut buf = [0u8; MAX_HTTP_REQUEST_SIZE];
-//     if let Ok(len) = stream_reader.read(&mut buf) {
-//         if let Ok(request) = HttpRequest::from_str(&String::from_utf8_lossy(&buf[0..len])) {
-//             http_message_handler(request, socket, state);
-//         }
-//     }
-// }
-
-//
-// pub fn http_message_handler(request: HttpRequest, mut socket: TcpStream, global: Arc<GlobalStates>) {
-//     // return StreamState::Keep if our connection should be updated to websockets
-//     match try_upgrade_connection(&request) {
-//         Some(web_socket_upgrade_response) => {
-//             match socket.write_all(web_socket_upgrade_response.as_bytes()) {
-//                 Ok(_) => global.spawn_from_new_connection(request.resource_location(), socket).unwrap(),
-//                 Err(_) => {},
-//             }
-//         },
-//         None => { // that wasn't a WebSocket request !
-//             let _ = send_resource(&request, &mut socket);
-//         },
-//     }
-// }
-
-// fn start_websocket_listener(state: Arc<Mutex<ServerState>>, id: ClientId, stream_reader: &mut TcpStream) {
-//     loop {
-//         match read_next_message(stream_reader) {
-//             Ok((payload, kind)) => match state.lock().unwrap().websocket_message_handler(id, payload, kind) {
-//                 StreamState::Keep => {},
-//                 StreamState::Drop => break,
-//             }
-//             Err(e) if e.should_retry() => {},
-//             Err(_) => break, // time to drop the connection
-//         }
-//     }
-// }
-//

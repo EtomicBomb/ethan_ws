@@ -4,8 +4,7 @@ use std::time::{UNIX_EPOCH, SystemTime};
 use rand::{thread_rng, Rng, random};
 
 use crate::{log, GOD_SET_PATH};
-use crate::apps::{GlobalState, PeerId, write_text};
-use crate::server_state::{StreamState};
+use crate::apps::{GlobalState, PeerId, write_text, StreamState};
 use json::Json;
 use std::str::FromStr;
 use rand::seq::SliceRandom;
@@ -36,49 +35,18 @@ impl GlobalState for TanksGlobalState {
     }
     
     fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> StreamState {
-        let result = match helper(self, id, message) {
+        if !self.has_player(id) { return StreamState::Drop } // that means we're dead!
+
+        match helper(self, id, message) {
             Some(_) => StreamState::Keep,
             None => {
                 self.remove_player(id);
                 StreamState::Drop
             },
-        };
-
-        result
+        }
     }
     
     fn periodic(&mut self) { }
-}
-
-fn helper(global: &mut TanksGlobalState, id: PeerId, message: WebSocketMessage) -> Option<()> {
-    let a = Json::from_str(message.get_text()?).ok()?;
-    let map = a.get_object()?;
-
-    match map.get("kind")?.get_string()? {
-        "updateFacing" => {
-            global.update_facing(id, map.get("newFacing")?.get_number()?);
-
-            global.announce();
-            Some(())
-        },
-        "guess" => {
-            if global.guessed_correctly(id, map.get("guessIsLeft")?.get_bool()?) {
-                global.announce();
-
-                Some(())
-            } else {
-                None
-            }
-        },
-        "fire" => {
-            // boom bam bop
-            global.shoot_laser(id);
-            global.announce();
-
-            Some(())
-        },
-        _ => None,
-    }
 }
 
 impl TanksGlobalState {
@@ -121,13 +89,24 @@ impl TanksGlobalState {
         }
     }
 
+    fn kill(&mut self, id: PeerId) {
+        let tcp_stream = &mut self.players.get_mut(&id).unwrap().tcp_stream;
+        let mut map = HashMap::new();
+        map.insert("kind".into(), Json::String("kill".into()));
+        write_text(tcp_stream, Json::Object(map).to_string());
+        self.remove_player(id);
+    }
+
     fn new_player(&mut self, id: PeerId, tcp_stream: TcpStream) {
         self.players.insert(id, PlayerInfo::from_random(&self.questions, tcp_stream));
     }
 
     fn remove_player(&mut self, id: PeerId) {
-        // bye bye!
-        self.players.remove(&id);
+        self.players.remove(&id); // bye bye!
+    }
+
+    fn has_player(&self, id: PeerId) -> bool {
+        self.players.contains_key(&id)
     }
 
     fn guessed_correctly(&mut self, id: PeerId, guess_is_left: bool) -> bool {
@@ -151,10 +130,21 @@ impl TanksGlobalState {
         let ray_y = a.y;
         let facing = a.facing;
 
-        for (_, other) in self.players.iter_mut().filter(|&(&other_id, _)| other_id != id) {
+        let mut to_kill = Vec::new();
+
+        for (&other_id, other) in self.players.iter_mut().filter(|&(&other_id, _)| other_id != id) {
             if intersect_circle(other.x, other.y, PLAYER_RADIUS, ray_x, ray_y, facing) {
-                if other.shield > 0 { other.shield -= 1 }
+                if other.shield > 0 {
+                    other.shield -= 1;
+                } else {
+                    // kill them !
+                    to_kill.push(other_id);
+                }
             }
+        }
+
+        for id in to_kill {
+            self.kill(id);
         }
 
         self.lasers.push(Laser { x: ray_x, y: ray_y, facing, expire: self.last_updated as f64 + LASER_DURATION_MILLIS })
@@ -221,18 +211,6 @@ impl TanksGlobalState {
     }
 }
 
-
-
-
-fn intersect_circle(circle_x: f64, circle_y: f64, radius: f64, ray_x: f64, ray_y: f64, ray_angle: f64) -> bool {
-    let b = circle_y * ray_angle.sin() - circle_x * ray_angle.cos() + ray_x * ray_angle.cos() - ray_y * ray_angle.sin();
-    let discriminant = b*b - ray_x * ray_x - ray_y * ray_y + 2.0* circle_x * ray_x + 2.0* circle_y * ray_y - circle_y * circle_y - circle_x * circle_x + radius * radius;
-
-    discriminant >= 0.0 && -b+discriminant.sqrt() >= 0.0
-}
-
-
-
 struct Laser {
     x: f64,
     y: f64,
@@ -251,8 +229,6 @@ struct PlayerInfo {
     tcp_stream: TcpStream,
 }
 
-
-
 impl PlayerInfo {
     fn from_random(questions: &[(String, String)], tcp_stream: TcpStream) -> PlayerInfo {
         PlayerInfo {
@@ -260,7 +236,7 @@ impl PlayerInfo {
             y: thread_rng().gen_range(0.0, MAP_HEIGHT as f64),
             facing: thread_rng().gen_range(0.0, TAU),
             color: format!("rgb({},{},{})", random::<u8>(), random::<u8>(), random::<u8>()),
-            shield: 0,
+            shield: 3,
             question: Question::new(questions),
             tcp_stream,
         }
@@ -321,6 +297,42 @@ impl Question {
     }
 }
 
+fn helper(global: &mut TanksGlobalState, id: PeerId, message: WebSocketMessage) -> Option<()> {
+    let a = Json::from_str(message.get_text()?).ok()?;
+    let map = a.get_object()?;
+
+    match map.get("kind")?.get_string()? {
+        "updateFacing" => {
+            global.update_facing(id, map.get("newFacing")?.get_number()?);
+            global.announce();
+            Some(())
+        },
+        "guess" => {
+            if global.guessed_correctly(id, map.get("guessIsLeft")?.get_bool()?) {
+                global.announce();
+                Some(())
+            } else {
+                None
+            }
+        },
+        "fire" => {
+            // boom bam bop
+            global.shoot_laser(id);
+            global.announce();
+            Some(())
+        },
+        _ => None,
+    }
+}
+
+
+
+fn intersect_circle(circle_x: f64, circle_y: f64, radius: f64, ray_x: f64, ray_y: f64, ray_angle: f64) -> bool {
+    let b = circle_y * ray_angle.sin() - circle_x * ray_angle.cos() + ray_x * ray_angle.cos() - ray_y * ray_angle.sin();
+    let discriminant = b*b - ray_x * ray_x - ray_y * ray_y + 2.0* circle_x * ray_x + 2.0* circle_y * ray_y - circle_y * circle_y - circle_x * circle_x + radius * radius;
+
+    discriminant >= 0.0 && -b+discriminant.sqrt() >= 0.0
+}
 
 fn wrap(mut n: f64, range: f64) -> f64 {
     n %= range;
@@ -342,15 +354,7 @@ fn cool_vector() -> Option<Vec<(String, String)>> {
 
 fn unix_time_millis() -> u64 {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(duration) => {
-            let millis = duration.as_millis();
-            if millis < u64::MAX as u128 {
-                millis as u64
-            } else {
-                log!("clock reading too big");
-                panic!("clock reading too big");
-            }
-        },
+        Ok(duration) => duration.as_millis() as u64,
         Err(_) => {
             log!("clock read failed");
             panic!("clock read failed");

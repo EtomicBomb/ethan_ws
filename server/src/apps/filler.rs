@@ -7,8 +7,7 @@ use std::net::TcpStream;
 use web_socket::{WebSocketMessage};
 use json::Json;
 
-use crate::server_state::{StreamState};
-use crate::apps::{PeerId, GlobalState, write_text};
+use crate::apps::{PeerId, GlobalState, write_text, StreamState};
 
 
 const WIDTH: usize = 8;

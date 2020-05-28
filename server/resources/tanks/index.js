@@ -35,15 +35,7 @@ socket.onopen = function() {
     }, 20);    
 };
 
-socket.onclose = function() {
-    clearInterval(drawLoop);
-
-    context.fillStyle = "pink";
-    context.strokeStyle = "pink";
-    context.fillRect(0, 0, window.innerWidth, window.innerHeight);
-
-    console.log("closed");
-};
+socket.onclose = die;
 
 socket.onmessage = function(msg) {
     let data = JSON.parse(msg.data);
@@ -57,9 +49,22 @@ socket.onmessage = function(msg) {
         document.getElementById("left").innerText = question.left;
         document.getElementById("right").innerText = question.right;
         updateLeaderboard();
+    } else if (data.kind == "kill") {
+        die();
     }
 };
 
+function die() {
+    clearInterval(drawLoop);
+
+    context.fillStyle = "pink";
+    context.strokeStyle = "pink";
+    context.fillRect(0, 0, window.innerWidth, window.innerHeight);
+
+    document.getElementById("definition").innerText = "YOU";
+    document.getElementById("left").innerText = "ARE";
+    document.getElementById("right").innerText = "DEAD";
+}
 
 
 

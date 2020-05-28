@@ -1,5 +1,4 @@
-use crate::apps::{GlobalState, PeerId, write_text};
-use crate::server_state::{StreamState};
+use crate::apps::{GlobalState, PeerId, write_text, StreamState};
 use std::net::TcpStream;
 use std::io::{BufReader, BufRead};
 use std::fs::File;

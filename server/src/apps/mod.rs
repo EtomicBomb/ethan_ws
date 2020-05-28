@@ -4,8 +4,6 @@ use web_socket::{Frame, FrameKind, WebSocketMessage, WebSocketListener};
 use std::io::Write;
 use std::sync::atomic::{self, AtomicU64};
 
-use crate::server_state::{StreamState};
-
 mod filler;
 mod god_set;
 mod tanks;
@@ -66,6 +64,12 @@ trait GlobalState: Send {
     fn periodic(&mut self);
 }
 
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum StreamState {
+    Keep,
+    Drop,
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 struct PeerId(u64);
 struct PeerIdGenerator(AtomicU64);
@@ -91,44 +95,3 @@ fn write_text(tcp_stream: &mut TcpStream, text: String) -> StreamState {
     }
 }
 
-
-// pub struct GlobalStates {
-//     god_set: Arc<Mutex<GodSet>>,
-//     tank: Arc<Mutex<GlobalTanksGameState>>,
-// }
-//
-// impl GlobalStates {
-//     pub fn new() -> Option<GlobalStates> {
-//         Some(GlobalStates {
-//             god_set: Arc::new(Mutex::new(GodSet::new()?)),
-//             tank: Arc::new(Mutex::new(GlobalTanksGameState::new())),
-//         })
-//     }
-//
-//     pub fn spawn_from_new_connection(&self, location: &str, socket: TcpStream) -> Result<(), ()> {
-//         let mut reader = socket.try_clone().unwrap();
-//
-//         let mut state: Box<dyn InternalState> =
-//             match location {
-//                 "/tanks" => Box::new(TanksStateInternal::new(Arc::clone(&self.tank))),
-//                 "/godset" => Box::new(GodSetStateInternal::new(Arc::clone(&self.god_set))),
-//                 _ => return Err(()),
-//             };
-//
-//         thread::Builder::new().name(format!("server{}#{}", location, 3)).spawn(move || {
-//             for message in WebSocketListener::new(reader) {
-//                 match state.on_message_receive(message) {
-//                     StreamState::Keep => {},
-//                     StreamState::Drop => break,
-//                 }
-//             }
-//         }).unwrap();
-//
-//         Ok(())
-//     }
-// }
-//
-//
-// trait InternalState: Send {
-//     fn on_message_receive(&mut self, message: WebSocketMessage) -> StreamState;
-// }
