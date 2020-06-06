@@ -60,7 +60,7 @@ dependencies = [
 name = "cool_binary"
 version = "0.1.0"
 dependencies = [
- "lisp",
+ "json",
 ]
 
 [[package]]

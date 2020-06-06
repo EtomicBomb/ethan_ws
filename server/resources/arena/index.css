@@ -1,0 +1,26 @@
+body, html {
+    position: fixed;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+#canvas {
+    width: 100%;
+    height: 100%;
+}
+
+p {
+    position: absolute;
+    color: white;
+    background-color: rgba(0, 0, 175, 0.7);
+    padding: 20px;
+}
+
+#lockWarning {
+    top: 10px;
+    left: 50%;
+    transform: translate(-50%, 0);
+}

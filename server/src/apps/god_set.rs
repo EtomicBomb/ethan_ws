@@ -1,5 +1,4 @@
-use crate::apps::{GlobalState, PeerId, write_text, StreamState};
-use std::net::TcpStream;
+use crate::apps::{GlobalState, PeerId, StreamState, TcpStreamWriter};
 use std::io::{BufReader, BufRead};
 use std::fs::File;
 use crate::GOD_SET_PATH;
@@ -45,11 +44,13 @@ impl GodSetGlobalState {
 }
 
 impl GlobalState for GodSetGlobalState {
-    fn new_peer(&mut self, _id: PeerId, mut tcp_stream: TcpStream) {
-        write_text(&mut tcp_stream, self.json.clone());
+    fn new_peer(&mut self, _id: PeerId, mut tcp_stream: TcpStreamWriter) {
+        tcp_stream.write_text_or_drop(self.json.clone());
     }
 
     fn on_message_receive(&mut self, _id: PeerId, _message: WebSocketMessage) -> StreamState { StreamState::Drop }
+
+    fn on_drop(&mut self, _id: PeerId) { }
 
     fn periodic(&mut self) { }
 }

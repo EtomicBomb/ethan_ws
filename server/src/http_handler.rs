@@ -2,7 +2,7 @@ use http::HttpRequest;
 
 use std::path::{Path, PathBuf};
 use std::io::{self, Write, Read, ErrorKind};
-use std::fs::{File};
+use std::fs::{File, self};
 use std::net::TcpStream;
 
 use crate::RESOURCES_ROOT;
@@ -49,22 +49,8 @@ fn get_data(request: &str) -> io::Result<Vec<u8>> {
         return Err(io::ErrorKind::PermissionDenied.into());
     }
 
-    Ok(read_to_vec(path)?)
-
+    fs::read(path)
 }
-
-fn read_to_vec(name: impl AsRef<Path>) -> io::Result<Vec<u8>> {
-    let mut file = File::open(name)?;
-
-    let buf_size = file.metadata().map(|m| m.len() + 1).unwrap_or(0) as usize;
-
-    let mut buf = Vec::with_capacity(buf_size);
-
-    file.read_to_end(&mut buf)?;
-
-    Ok(buf)
-}
-
 
 fn is_to_resources_folder(path: &PathBuf) -> bool {
     // make sure request doesn't look like /../../../Desktop/secrets.txt or something

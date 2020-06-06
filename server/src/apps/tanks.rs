@@ -1,10 +1,9 @@
 use std::collections::HashMap;
-use std::net::TcpStream;
 use std::time::{UNIX_EPOCH, SystemTime};
 use rand::{thread_rng, Rng, random};
 
 use crate::{GOD_SET_PATH};
-use crate::apps::{GlobalState, PeerId, write_text, StreamState};
+use crate::apps::{GlobalState, PeerId, StreamState, TcpStreamWriter};
 use json::Json;
 use std::str::FromStr;
 use rand::seq::SliceRandom;
@@ -29,7 +28,7 @@ pub struct TanksGlobalState {
 }
 
 impl GlobalState for TanksGlobalState {
-    fn new_peer(&mut self, id: PeerId, tcp_stream: TcpStream) {
+    fn new_peer(&mut self, id: PeerId, tcp_stream: TcpStreamWriter) {
         self.new_player(id, tcp_stream);
         self.announce();
     }
@@ -45,7 +44,9 @@ impl GlobalState for TanksGlobalState {
             },
         }
     }
-    
+
+    fn on_drop(&mut self, _id: PeerId) { }
+
     fn periodic(&mut self) { }
 }
 
@@ -81,8 +82,8 @@ impl TanksGlobalState {
     fn announce(&mut self) {
         for id in self.players.keys().cloned().collect::<Vec<PeerId>>() {
             let message = self.game_state_message_to(id).to_string();
-            let mut stream = &mut self.players.get_mut(&id).unwrap().tcp_stream;
-            write_text(&mut stream, message);
+            let writer = &mut self.players.get_mut(&id).unwrap().tcp_stream;
+            writer.write_text_or_drop(message);
         }
     }
 
@@ -90,11 +91,11 @@ impl TanksGlobalState {
         let tcp_stream = &mut self.players.get_mut(&id).unwrap().tcp_stream;
         let mut map = HashMap::new();
         map.insert("kind".into(), Json::String("kill".into()));
-        write_text(tcp_stream, Json::Object(map).to_string());
+        tcp_stream.write_json_or_drop(Json::Object(map));
         self.remove_player(id);
     }
 
-    fn new_player(&mut self, id: PeerId, tcp_stream: TcpStream) {
+    fn new_player(&mut self, id: PeerId, tcp_stream: TcpStreamWriter) {
         self.players.insert(id, PlayerInfo::from_random(&self.questions, tcp_stream));
     }
 
@@ -223,11 +224,11 @@ struct PlayerInfo {
     color: String,
     shield: usize,
     question: Question,
-    tcp_stream: TcpStream,
+    tcp_stream: TcpStreamWriter,
 }
 
 impl PlayerInfo {
-    fn from_random(questions: &[(String, String)], tcp_stream: TcpStream) -> PlayerInfo {
+    fn from_random(questions: &[(String, String)], tcp_stream: TcpStreamWriter) -> PlayerInfo {
         PlayerInfo {
             x: thread_rng().gen_range(0.0, MAP_WIDTH as f64),
             y: thread_rng().gen_range(0.0, MAP_HEIGHT as f64),

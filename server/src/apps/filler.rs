@@ -2,12 +2,11 @@ use rand::{Rng, random};
 use rand::distributions::{Distribution, Standard};
 
 use std::collections::{HashSet, HashMap};
-use std::net::TcpStream;
 
 use web_socket::{WebSocketMessage};
 use json::Json;
 
-use crate::apps::{PeerId, GlobalState, write_text, StreamState};
+use crate::apps::{PeerId, GlobalState, StreamState, TcpStreamWriter};
 
 
 const WIDTH: usize = 8;
@@ -17,7 +16,7 @@ const DEPTH: usize = 4;
 
 
 pub struct FillerGlobalState {
-    active_players: HashMap<PeerId, (GameState, TcpStream)>,
+    active_players: HashMap<PeerId, (GameState, TcpStreamWriter)>,
 }
 
 
@@ -28,18 +27,17 @@ impl FillerGlobalState {
 }
 
 impl GlobalState for FillerGlobalState {
-    fn new_peer(&mut self, id: PeerId, tcp_stream: TcpStream) {
+    fn new_peer(&mut self, id: PeerId, tcp_stream: TcpStreamWriter) {
         self.active_players.insert(id, (GameState::new(), tcp_stream));
         let player = self.active_players.get_mut(&id).unwrap();
-        write_text(&mut player.1, player.0.jsonify().to_string());
+        player.1.write_json_or_drop(player.0.jsonify());
     }
 
     fn on_message_receive(&mut self, from: PeerId, message: WebSocketMessage) -> StreamState {
-        dbg!();
         let player = self.active_players.get_mut(&from).unwrap();
 
         let ret = match handle_request(&mut player.0, message) {
-            Some(reply) => write_text(&mut player.1, reply.to_string()),
+            Some(reply) => player.1.write_json_or_drop(reply),
             None => StreamState::Drop,
         };
 
@@ -49,6 +47,8 @@ impl GlobalState for FillerGlobalState {
 
         ret
     }
+
+    fn on_drop(&mut self, _id: PeerId) { }
 
     fn periodic(&mut self) { }
 }

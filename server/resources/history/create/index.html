@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+    <meta charset="UTF-8">
+    <link rel=icon href="/favicon.ico" type="image/png">
+    <link rel="stylesheet" href="/history/index.css" type="text/css">
+    <title>ethan.ws</title>
+</head>
+
+<body>
+<h1>Create an APUSH Game</h1>
+
+<div id="createMenu">
+    <label for="gameKindQuiz">Quiz</label>
+    <input type="radio" name="gameKind" id="gameKindQuiz" checked>
+    <label for="gameKindQuiz">Rocket</label>
+    <input type="radio" name="gameKind" id="gameKindRocket">
+    <label for="gameKindQuiz">Clicker</label>
+    <input type="radio" name="gameKind" id="gameKindClicker">
+
+    <input type="text" id="username" placeholder="Enter a username">
+
+    <button id="createGameSubmit" onclick="createGameButtonHandler()">Create</button>
+</div>
+
+<script src="/history/create/index.js"></script>
+</body>
