@@ -7,8 +7,8 @@ var height = 500;
 var blockWidth = 50;
 var blockHeight = 50;
 
-var x = width*Math.random();
-var y = height*Math.random();
+var x = (width-blockWidth)*Math.random();
+var y = (height-blockHeight)*Math.random();
 
 var vx = 3;
 var vy = 3.1;

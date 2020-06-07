@@ -1,7 +1,7 @@
 use crate::apps::{PeerId, TcpStreamWriter, StreamState, GlobalState};
 use std::collections::HashMap;
 use web_socket::WebSocketMessage;
-use json::{jsons, jsont, Json};
+use json::{jsont, Json};
 use rand::{random, thread_rng, Rng};
 use std::str::FromStr;
 
@@ -57,7 +57,7 @@ impl ArenaGlobalState {
         for id in self.players.keys().cloned().collect::<Vec<PeerId>>() {
             let array = self.players.iter()
                 .filter(|&(&i, _)| i != id)
-                .map(|(&id, player)| player.as_json())
+                .map(|(_, player)| player.as_json())
                 .collect();
 
             let json_string = Json::Array(array).to_string();

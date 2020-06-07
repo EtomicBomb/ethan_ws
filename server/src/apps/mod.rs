@@ -9,6 +9,7 @@ mod god_set;
 mod tanks;
 mod history;
 mod arena;
+mod secure;
 
 use std::sync::{Arc, Mutex};
 use std::{thread};
@@ -17,6 +18,7 @@ use crate::apps::god_set::GodSetGlobalState;
 use crate::apps::tanks::TanksGlobalState;
 use crate::apps::history::HistoryGlobalState;
 use crate::apps::arena::ArenaGlobalState;
+use crate::apps::secure::SecureGlobalState;
 
 use json::Json;
 
@@ -33,6 +35,7 @@ impl CoolStuff {
         map.insert("/tanks".into(), Arc::new(Mutex::new(TanksGlobalState::new())));
         map.insert("/history".into(), Arc::new(Mutex::new(HistoryGlobalState::new())));
         map.insert("/arena".into(), Arc::new(Mutex::new(ArenaGlobalState::new())));
+        map.insert("/secure".into(), Arc::new(Mutex::new(SecureGlobalState::new())));
 
         Some(CoolStuff { map, peer_id_generator: PeerIdGenerator::new() })
     }

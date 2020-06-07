@@ -32,7 +32,7 @@ impl GlobalState for HistoryGlobalState {
         }
     }
 
-    fn on_drop(&mut self, id: PeerId) {
+    fn on_drop(&mut self, _id: PeerId) {
         // let was_in_game = ;
 
         todo!("implement");
@@ -93,13 +93,12 @@ impl HistoryGlobalState {
                 }
             },
             "start" => {
-                todo!("fix");
+                todo!("fix")
                 // let game_id = self.users.get(&from)?.in_lobby?;
                 // let mut lobby = self.lobbies.remove(&game_id)?;
                 //
                 // self.active_games.insert(game_id, lobby.into_game(&mut self.users).ok()?);
 
-                Some(())
             }
             _ => None,
         }
@@ -179,7 +178,7 @@ struct QuizGame {
 impl QuizGame {
 
 
-    fn from_lobby(mut lobby: Lobby, users: &mut Users) -> QuizGame {
+    fn from_lobby(lobby: Lobby, users: &mut Users) -> QuizGame {
         lobby.send_to_all(users, jsons!({
             kind: "upgrade",
             gameKind: "gameKindQuiz",

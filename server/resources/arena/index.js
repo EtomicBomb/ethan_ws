@@ -70,10 +70,9 @@ var boam = {r:255,g:0,b:255};
 
 var samInducedBruh = [
     new HorizontalLine(0, -5, Infinity, boam),
-
     new HorizontalLine(0, 0, 9, blue),
-    new HorizontalLine(9, 0, 9, blue),
-    new VerticalLine(0, 0, 9, blue),
+    new HorizontalLine(9, 0, 9, {r:255, g:200, b:0}),
+    new VerticalLine(0, 0, 9, {r:255, g:0, b:0}),
     new VerticalLine(9, 0, 9, blue),
     new Circle(5, 5, 0.5, green),
     new Circle(7, 5, 0.5, boauns),
@@ -120,9 +119,7 @@ document.addEventListener("touchstart", event => {
         }
     }
 });
-document.addEventListener("touchend", event => {
-    touchMove = "none";
-});
+document.addEventListener("touchend", event => touchMove = "none");
 
 
 
@@ -161,9 +158,17 @@ function drawFrame(elapsed) {
     context.strokeStyle = "white";
     context.fillRect(0, 0, width, height);
 
+    drawGrid();
+
     var cos, sin, distance, d, f, wallStuff, i;
 
-    for (var screenX=0, checkAngle=theta-FOV; screenX<width; screenX += RECT_WIDTH, checkAngle += RECT_WIDTH*FOV/(width/2)) {
+    var length = width/(2*Math.tan(FOV));
+
+//    for (var screenX=0, checkAngle=theta-FOV; screenX<width; screenX += RECT_WIDTH, checkAngle += RECT_WIDTH*FOV/(width/2)) {
+    for (var screenX=0; screenX < width; screenX += RECT_WIDTH) {
+        var checkAngle = map(screenX, 0, width, theta-FOV, theta+FOV);
+//        var checkAngle = theta + Math.atan2((screenX - width/2),length);
+
         cos = Math.cos(checkAngle);
         sin = Math.sin(checkAngle);
         distance = Infinity;
@@ -178,6 +183,7 @@ function drawFrame(elapsed) {
             }
         }
 
+//        wallStuff = height* length*0.3/(length+distance);
         wallStuff = height/2 - height/distance;
 
         f = map(distance, 0, 20, 1, 0);
@@ -238,4 +244,45 @@ function rgb(r, g, b) {
 
 function map(x, inMin, inMax, outMin, outMax) { // the spicy sauce
     return (x - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+}
+
+function drawGrid() {
+    // i guess we know playerX, playerY, and theta
+
+    context.fillStyle = "grey";
+    context.strokeStyle = "grey";
+
+    var playerXRounded = Math.floor(playerX);
+    var playerYRounded = Math.floor(playerY);
+
+
+//    for (var screenX=0, checkAngle=theta-FOV; screenX<width; screenX += RECT_WIDTH, checkAngle += RECT_WIDTH*FOV/(width/2)) {
+    for (var screenX=0; screenX < width; screenX += RECT_WIDTH) {
+        var checkAngle = map(screenX, 0, width, theta-FOV, theta+FOV);
+
+        for (var lineX=playerXRounded-30; lineX < playerXRounded+30; lineX++) {
+            var distance = (lineX - playerX) / Math.cos(checkAngle);
+
+            if (distance > 0) {
+                var wallStuff = height/2 + height/distance;
+                context.fillRect(screenX, wallStuff, RECT_WIDTH, RECT_WIDTH);
+            }
+        }
+
+        for (var lineY=playerYRounded-30; lineY < playerYRounded+30; lineY++) {
+            var distance = (playerY - lineY) / Math.sin(checkAngle);
+
+            if (distance > 0) {
+                var wallStuff = height/2 + height/distance;
+                context.fillRect(screenX, wallStuff, RECT_WIDTH, RECT_WIDTH);
+            }
+        }
+    }
+}
+
+function line(startX, startY, endX, endY) {
+    context.beginPath();
+    canvas.moveTo(startX, startY);
+    canvas.lineTo(endX, endY);
+    canvas.stroke();
 }

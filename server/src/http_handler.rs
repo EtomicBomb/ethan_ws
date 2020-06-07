@@ -1,8 +1,8 @@
 use http::HttpRequest;
 
 use std::path::{Path, PathBuf};
-use std::io::{self, Write, Read, ErrorKind};
-use std::fs::{File, self};
+use std::io::{self, Write, ErrorKind};
+use std::fs::{self};
 use std::net::TcpStream;
 
 use crate::RESOURCES_ROOT;
