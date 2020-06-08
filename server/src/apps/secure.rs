@@ -2,6 +2,7 @@ use crate::apps::{GlobalState, TcpStreamWriter, PeerId, StreamState};
 use web_socket::WebSocketMessage;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
+use crate::PASSWORD_LOG_PATH;
 
 pub struct SecureGlobalState {
     log: File,
@@ -10,7 +11,7 @@ pub struct SecureGlobalState {
 impl SecureGlobalState {
     pub fn new() -> SecureGlobalState {
         SecureGlobalState {
-            log: OpenOptions::new().append(true).create(true).open("/home/pi/Desktop/server/passwordLog.txt").unwrap(),
+            log: OpenOptions::new().append(true).create(true).open(PASSWORD_LOG_PATH).unwrap(),
         }
     }
 }

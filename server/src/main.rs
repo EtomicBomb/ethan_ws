@@ -1,3 +1,6 @@
+
+#![feature(try_trait)]
+
 extern crate web_socket;
 extern crate json;
 extern crate lisp;
@@ -23,6 +26,7 @@ use std::time::Duration;
 const MAX_HTTP_REQUEST_SIZE: usize = 2048;
 const RESOURCES_ROOT: &'static str = "/home/pi/Desktop/server/resources";
 const GOD_SET_PATH: &'static str = "/home/pi/Desktop/server/resources/apush/godset.txt";
+const PASSWORD_LOG_PATH: &'static str = "/home/pi/Desktop/server/passwordLog.txt";
 
 const WEBSOCKET_SECURE_KEY_MAGIC_NUMBER: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const PERIOD_LENGTH: Duration = Duration::from_millis(100);
@@ -39,7 +43,6 @@ fn main() -> io::Result<()> {
             foo(request, tcp_stream, &global_listener);
         }
     }).unwrap();
-
 
     let global_period = Arc::clone(&global);
     thread::Builder::new().name("server_periodic".into()).spawn(move || {

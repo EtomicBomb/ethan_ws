@@ -1,24 +1,24 @@
+
 use crate::apps::{GlobalState, PeerId, StreamState, TcpStreamWriter};
 use web_socket::WebSocketMessage;
 use std::collections::{HashMap};
 
 use json::{Json, jsons, jsont};
 use std::str::FromStr;
-
-// API DOCUMENTATION
-
-// CLIENT MESSAGES
-// create: username, settings
-// join: username,
-
+use std::io::{BufReader, BufRead};
+use std::fs::File;
+use crate::GOD_SET_PATH;
+use std::option::NoneError;
+use std::fmt;
+use std::fmt::Debug;
 
 pub struct HistoryGlobalState {
     users: Users,
     lobbies: HashMap<GameId, Lobby>,
-    active_games: HashMap<GameId, Box<dyn Game>>,
+    active_games: HashMap<GameId, Game>,
     game_id_generator: GameIdGenerator,
+    vocabulary_model: VocabularyModel,
 }
-
 
 impl GlobalState for HistoryGlobalState {
     fn new_peer(&mut self, id: PeerId, writer: TcpStreamWriter) {
@@ -32,20 +32,17 @@ impl GlobalState for HistoryGlobalState {
         }
     }
 
-    fn on_drop(&mut self, _id: PeerId) {
-        // let was_in_game = ;
+    fn on_drop(&mut self, id: PeerId) {
+        // what game_id were they in?
+        if let Some(game_id) = self.users.get_game_id(id) {
+            if let Some(lobby) = self.lobbies.get_mut(&game_id) {
+                lobby.leave(id, &mut self.users);
+            } else if let Some(game) = self.active_games.get_mut(&game_id) {
+                game.leave(id, &mut self.users);
+            }
+        }
 
-        todo!("implement");
-        // if let Some(game_id) = self.users.get(&id).and_then(|user| user.in_lobby) {
-        //     if let Some(lobby) = self.lobbies.get_mut(&game_id)  {
-        //         lobby.leave(id, &mut self.users);
-        //         if lobby.host == id { self.lobbies.remove(&game_id); }
-        //     }
-        //
-        //     if let Some(game) = self.active_games.get_mut(&game_id) {
-        //         game.on_drop(id);
-        //     }
-        // }
+        self.users.remove(id);
     }
 
     fn periodic(&mut self) { }
@@ -58,6 +55,7 @@ impl HistoryGlobalState {
             lobbies: HashMap::new(),
             active_games: HashMap::new(),
             game_id_generator: GameIdGenerator::new(),
+            vocabulary_model: VocabularyModel::new().unwrap()
         }
     }
 
@@ -69,13 +67,27 @@ impl HistoryGlobalState {
         match json.get("kind")?.get_string()? {
             "create" => {
                 let username = json.get("username")?.get_string()?.to_string();
-                self.users.add_username(from, username);
+                self.users.add_username(from, username.clone());
 
-                let id = self.game_id_generator.next();
+                match Lobby::new(from, json.get("settings")?, &self.vocabulary_model) {
+                    Ok(mut lobby) => {
+                        let game_id = self.game_id_generator.next();
+                        self.lobbies.insert(game_id, lobby);
+                        self.users.add_game_id(from, game_id);
 
-                self.lobbies.insert(id, Lobby::new(from, json.get("settings")?.get_string()?.to_string()));
-
-                self.users.add_game_id(from, id);
+                        self.users.get_writer(from).write_text_or_drop(jsons!({
+                            kind: "createSuccess",
+                            hostName: username,
+                            gameId: (game_id.stringify()),
+                        }));
+                    },
+                    Err(e) => {
+                        self.users.get_writer(from).write_text_or_drop(jsons!({
+                            kind: "createFailed",
+                            message: (e.to_string()),
+                        }));
+                    },
+                }
 
                 Some(())
             },
@@ -83,61 +95,81 @@ impl HistoryGlobalState {
                 let username = json.get("username")?.get_string()?.to_string();
                 self.users.add_username(from, username);
 
-                let game_id = GameId::from_f64(json.get("id")?.get_number()?);
-                match self.lobbies.get_mut(&game_id) {
-                    Some(lobby) => Some(lobby.try_join(from, game_id, &mut self.users)),
-                    None => {
-                        let writer = self.users.get_writer(from);
-                        writer.write_text_or_none(jsons!({kind:"invalidGameId"}))
-                    },
+                if let Some(game_id) = GameId::from_json(json.get("id")?) {
+                    match self.lobbies.get_mut(&game_id) {
+                        Some(lobby) => Some(lobby.join(from, game_id, &mut self.users)),
+                        None => {
+                            let writer = self.users.get_writer(from);
+                            writer.write_text_or_none(jsons!({kind:"invalidGameId"}))
+                        },
+                    }
+                } else {
+                    let writer = self.users.get_writer(from);
+                    writer.write_text_or_none(jsons!({kind:"invalidGameId"}))
                 }
             },
             "start" => {
-                todo!("fix")
-                // let game_id = self.users.get(&from)?.in_lobby?;
-                // let mut lobby = self.lobbies.remove(&game_id)?;
-                //
-                // self.active_games.insert(game_id, lobby.into_game(&mut self.users).ok()?);
+                let game_id = self.users.get_game_id(from)?;
 
+                let mut lobby = self.lobbies.remove(&game_id)?;
+                lobby.announce_starting(&mut self.users);
+                self.active_games.insert(game_id, Game::from_lobby(lobby));
+
+                Some(())
             }
             _ => None,
         }
     }
 }
 
-
+#[derive(Debug)]
 struct Lobby {
     host: PeerId,
     users: Vec<PeerId>,
-    game_kind_string: String,
+    terms: Vec<TermId>,
+    game_specific: Box<dyn GameSpecific>,
 }
 
 impl Lobby {
-    fn new(host: PeerId, game_kind_string: String) -> Lobby {
-        Lobby { host, users: Vec::new(), game_kind_string }
+    fn new(host: PeerId, json: &Json, vocabulary: &VocabularyModel) -> Result<Lobby, LobbyCreateError> {
+        let json_map = json.get_object()?;
+
+        let start = get_chapter_thing(json_map.get("startSection")?.get_string()?)?;
+        let end = get_chapter_thing(json_map.get("endSection")?.get_string()?)?;
+
+        let terms = vocabulary.terms_in_range(start, end);
+
+        if terms.is_empty() {
+            return Err(LobbyCreateError::BlankRange);
+        }
+
+        let game_specific =
+            match json_map.get("gameKind")?.get_string()? {
+                "gameKindQuiz" => Box::new(QuizGame::new()),
+                "gameKindRocket" => return Err(LobbyCreateError::Other), // TODO
+                "gameKindClicker" => return Err(LobbyCreateError::Other), // TODO
+                _ => return Err(LobbyCreateError::Other),
+            };
+
+        Ok(Lobby { host, users: Vec::new(), terms, game_specific })
     }
 
-    fn into_game(self, users: &mut Users) -> Result<Box<dyn Game>, ()> {
-        Ok(match self.game_kind_string.as_str() {
-            "gameKindQuiz" => Box::new(QuizGame::from_lobby(self, users)),
-            _ => return Err(()),
-        })
-    }
-
-    fn try_join(&mut self, user: PeerId, game_id: GameId, users: &mut Users) {
-        if self.users.contains(&user) {
-            users.get_writer(user).write_text_or_drop(jsons!({kind:"gameJoinError"}));
-        } else {
+    fn join(&mut self, user: PeerId, game_id: GameId, users: &mut Users) {
+        if !self.users.contains(&user) {
             self.users.push(user);
             users.add_game_id(user, game_id);
+            let host_username = users.get_username(self.host).to_string();
+            users.get_writer(user).write_text_or_drop(jsons!({
+                kind: "joinSuccess",
+                hostName: host_username,
+            }));
             self.announce_members(users);
         }
     }
 
-    fn leave(&mut self, id: PeerId, users: &mut Users) {
+    fn leave(&mut self, id: PeerId, users: &mut Users)  {
         if id == self.host {
-            // what the fuck??
-            self.send_to_all(users,jsons!({kind:"hostAbandoned"}))
+            self.send_to_all(users,jsons!({kind:"hostAbandoned"})); // what the fuck????
 
         } else if self.users.contains(&id) {
             self.users.remove(self.users.iter().position(|&u| u == id).unwrap());
@@ -146,9 +178,17 @@ impl Lobby {
     }
 
     fn announce_members(&self, users: &mut Users) {
-
         let string = jsons!({
             kind: "refreshLobby",
+            users: (Json::Array(self.users.iter().map(|&u| Json::String(users.get_username(u).to_string())).collect())),
+        });
+
+        self.send_to_all(users, string);
+    }
+
+    fn announce_starting(&self, users: &mut Users) {
+        let string = jsons!({
+            kind: "startingGame",
             host: (users.get_username(self.host)),
             users: (Json::Array(self.users.iter().map(|&u| Json::String(users.get_username(u).to_string())).collect())),
         });
@@ -165,34 +205,91 @@ impl Lobby {
     }
 }
 
-
-trait Game: Send {
-    fn on_drop(&mut self, id: PeerId);
+#[derive(Copy, Clone )]
+enum LobbyCreateError {
+    UnableToParseChapters,
+    BlankRange,
+    Other,
 }
 
-struct QuizGame {
+impl From<NoneError> for LobbyCreateError {
+    fn from(_: NoneError) -> LobbyCreateError {
+        LobbyCreateError::Other
+    }
+}
+
+impl From<std::io::Error> for LobbyCreateError {
+    fn from(_: std::io::Error) -> LobbyCreateError {
+        LobbyCreateError::Other
+    }
+}
+
+impl fmt::Display for LobbyCreateError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", match *self {
+            LobbyCreateError::UnableToParseChapters => "Unable to interpret your chapter range",
+            LobbyCreateError::BlankRange => "No terms were found in that range",
+            LobbyCreateError::Other => "Error in creating your game",
+        })
+    }
+}
+
+fn get_chapter_thing(string: &str) -> Result<(u8, u8), LobbyCreateError> {
+    let mut blang: Vec<&str> = string.split(".").collect();
+    if blang.len() != 2 {
+        return Err(LobbyCreateError::UnableToParseChapters);
+    }
+
+    let chapter = blang[0].parse().map_err(|_| LobbyCreateError::UnableToParseChapters)?;
+    let section = blang[1].parse().map_err(|_| LobbyCreateError::UnableToParseChapters)?;
+
+    Ok((chapter, section))
+}
+
+
+struct Game {
     host: PeerId,
     users: Vec<PeerId>,
+    terms: Vec<TermId>,
+    game_specific: Box<dyn GameSpecific>,
+}
+
+impl Game {
+    fn from_lobby(lobby: Lobby) -> Game {
+        Game {
+            host: lobby.host,
+            users: lobby.users,
+            terms: lobby.terms,
+            game_specific: lobby.game_specific,
+        }
+    }
+
+    fn leave(&mut self, id: PeerId, users: &mut Users) {
+        todo!("game leave")
+    }
+
+
+}
+
+trait GameSpecific: Send+Debug {
+
+}
+
+#[derive(Debug)]
+struct QuizGame {
+
 }
 
 impl QuizGame {
-
-
-    fn from_lobby(lobby: Lobby, users: &mut Users) -> QuizGame {
-        lobby.send_to_all(users, jsons!({
-            kind: "upgrade",
-            gameKind: "gameKindQuiz",
-        }));
-
-        QuizGame { host: lobby.host, users: lobby.users }
+    fn new() -> QuizGame {
+        QuizGame { }
     }
 }
 
-impl Game for QuizGame {
-    fn on_drop(&mut self, id: PeerId) {
+impl GameSpecific for QuizGame {
 
-    }
 }
+
 
 struct Users {
     map: HashMap<PeerId, (TcpStreamWriter, Option<GameId>, Option<String>)>,
@@ -227,31 +324,28 @@ impl Users {
         &mut self.map.get_mut(&id).unwrap().0
     }
 
+    fn get_game_id(&self, id: PeerId) -> Option<GameId> {
+        self.map[&id].1
+    }
+
     fn get_username(&self, id: PeerId) -> &str {
         self.map[&id].2.as_ref().unwrap()
     }
 }
 
 
-// struct User {
-//     writer: TcpStreamWriter,
-//     in_lobby: Option<GameId>,
-//     username: Option<String>,
-// }
 
 
-
-
-
-
-
-
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 struct GameId(u32);
 
 impl GameId {
-    fn from_f64(n: f64) -> GameId {
-        GameId(n as u32)
+    fn from_json(json: &Json) -> Option<GameId> {
+        Some(GameId(json.get_number()? as u32))
+    }
+
+    fn stringify(&self) -> String {
+        self.0.to_string()
     }
 }
 
@@ -265,4 +359,65 @@ impl GameIdGenerator {
         GameId(self.0)
     }
 }
+
+
+struct VocabularyModel {
+    terms: HashMap<TermId, Term>,
+}
+
+
+impl VocabularyModel {
+    fn new() -> Option<VocabularyModel> {
+        let file = BufReader::new(File::open(GOD_SET_PATH).unwrap());
+
+        let terms = file.lines().zip(1..)
+            .map(|(line, i)| Some((TermId(i), Term::from_line(line.ok()?)?)))
+            .collect::<Option<HashMap<TermId, Term>>>()?;
+
+        Some(VocabularyModel { terms })
+    }
+
+    fn terms_in_range(&self, start: (u8, u8), end: (u8, u8)) -> Vec<TermId> {
+        self.terms.iter()
+            .filter(|&(_, term)| {
+                start <= (term.chapter, term.section) && (term.chapter, term.section) <= end
+            })
+            .map(|(&id, _)| id)
+            .collect()
+    }
+}
+
+#[derive(Clone)]
+struct Term {
+    chapter: u8,
+    section: u8,
+    year_start: u16,
+    year_end: u16,
+    social: bool,
+    political: bool,
+    economic: bool,
+    term: String,
+    definition: String,
+}
+
+impl Term {
+    fn from_line(line: String) -> Option<Term> {
+        let mut split = line.trim_end().split("\t");
+        Some(Term {
+            chapter: split.next()?.parse().ok()?,
+            section: split.next()?.parse().ok()?,
+            year_start: split.next()?.parse().ok()?,
+            year_end: split.next()?.parse().ok()?,
+            social: split.next()?.parse().ok()?,
+            political: split.next()?.parse().ok()?,
+            economic: split.next()?.parse().ok()?,
+            term: split.next()?.to_string(),
+            definition: split.next()?.to_string(),
+        })
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+struct TermId(u32);
+
 

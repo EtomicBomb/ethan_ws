@@ -4,14 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <link rel=icon href="/favicon.ico" type="image/png">
-    <link rel="stylesheet" href="/history/index.css" type="text/css">
+    <link rel="stylesheet" href="/history/create/index.css" type="text/css">
     <title>ethan.ws</title>
 </head>
 
 <body>
-<h1>Create an APUSH Game</h1>
 
 <div id="createMenu">
+    <h1>Create an APUSH Game</h1>
+    <p id="errorLabel"></p>
     <label for="gameKindQuiz">Quiz</label>
     <input type="radio" name="gameKind" id="gameKindQuiz" checked>
     <label for="gameKindQuiz">Rocket</label>
@@ -19,10 +20,23 @@
     <label for="gameKindQuiz">Clicker</label>
     <input type="radio" name="gameKind" id="gameKindClicker">
 
-    <input type="text" id="username" placeholder="Enter a username">
+    <label for="startSection">Start Section</label>
+    <input type="text" id="startSection" placeholder="26.2" autocomplete="off">
+    <label for="startSection">End Section</label>
+    <input type="text" id="endSection" placeholder="26.4" autocomplete="off">
+
+    <input type="text" id="username" placeholder="Enter your name" autocomplete="off">
 
     <button id="createGameSubmit" onclick="createGameButtonHandler()">Create</button>
 </div>
+
+<div id="lobby">
+    <h1 id="hostName"></h1>
+    <p id="gameId"></p>
+    <textarea id="members" readonly></textarea>
+    <button id="startGameButton" onclick="startGameButtonHandler()">Start Game</button>
+</div>
+
 
 <script src="/history/create/index.js"></script>
 </body>
