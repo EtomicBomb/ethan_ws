@@ -13,12 +13,14 @@
 <div id="createMenu">
     <h1>Create an APUSH Game</h1>
     <p id="errorLabel"></p>
-    <label for="gameKindQuiz">Quiz</label>
-    <input type="radio" name="gameKind" id="gameKindQuiz" checked>
-    <label for="gameKindQuiz">Rocket</label>
-    <input type="radio" name="gameKind" id="gameKindRocket">
-    <label for="gameKindQuiz">Clicker</label>
-    <input type="radio" name="gameKind" id="gameKindClicker">
+
+    <label for="gameKindSelect">Select the game mode</label>
+    <select id="gameKindSelect">
+        <option value="gameKindQuiz">Quiz</option>
+        <option value="gameKindRocket">Rocket</option>
+        <option value="gameKindClicker">Clicker</option>
+    </select>
+
 
     <label for="startSection">Start Section</label>
     <input type="text" id="startSection" placeholder="26.2" autocomplete="off">

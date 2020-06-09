@@ -24,13 +24,16 @@ function transitionToLobby() {
 }
 
 function createGameButtonHandler() {
+    let gameKindSelector = document.getElementById("gameKindSelect");
+    let gameKind = gameKindSelector.options[gameKindSelector.selectedIndex].value;
+
     socket.send(JSON.stringify({
         kind: "create",
         username: document.getElementById("username").value,
         settings: {
             startSection: document.getElementById("startSection").value,
             endSection: document.getElementById("endSection").value,
-            gameKind: document.querySelector("input[name='gameKind']:checked").id,
+            gameKind: gameKind,
        },
     }));
 }

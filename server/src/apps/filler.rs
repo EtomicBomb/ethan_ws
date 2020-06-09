@@ -3,10 +3,10 @@ use rand::distributions::{Distribution, Standard};
 
 use std::collections::{HashSet, HashMap};
 
-use web_socket::{WebSocketMessage};
+use web_socket::{WebSocketMessage, WebSocketWriter};
 use json::Json;
 
-use crate::apps::{PeerId, GlobalState, StreamState, TcpStreamWriter};
+use crate::apps::{PeerId, GlobalState, Drop};
 
 
 const WIDTH: usize = 8;
@@ -16,7 +16,7 @@ const DEPTH: usize = 4;
 
 
 pub struct FillerGlobalState {
-    active_players: HashMap<PeerId, (GameState, TcpStreamWriter)>,
+    active_players: HashMap<PeerId, (GameState, WebSocketWriter)>,
 }
 
 
@@ -27,28 +27,24 @@ impl FillerGlobalState {
 }
 
 impl GlobalState for FillerGlobalState {
-    fn new_peer(&mut self, id: PeerId, tcp_stream: TcpStreamWriter) {
+    fn new_peer(&mut self, id: PeerId, tcp_stream: WebSocketWriter) {
         self.active_players.insert(id, (GameState::new(), tcp_stream));
         let player = self.active_players.get_mut(&id).unwrap();
-        player.1.write_json_or_drop(player.0.jsonify());
+        let _ = player.1.write_string(&player.0.jsonify().to_string());
     }
 
-    fn on_message_receive(&mut self, from: PeerId, message: WebSocketMessage) -> StreamState {
+    fn on_message_receive(&mut self, from: PeerId, message: WebSocketMessage) -> Result<(), Drop> {
         let player = self.active_players.get_mut(&from).unwrap();
 
-        let ret = match handle_request(&mut player.0, message) {
-            Some(reply) => player.1.write_json_or_drop(reply),
-            None => StreamState::Drop,
-        };
-
-        if ret == StreamState::Drop {
-            self.active_players.remove(&from);
+        match handle_request(&mut player.0, message) {
+            Some(reply) => Ok(player.1.write_string(&reply.to_string())?),
+            None => Err(Drop),
         }
-
-        ret
     }
 
-    fn on_drop(&mut self, _id: PeerId) { }
+    fn on_drop(&mut self, id: PeerId) {
+        self.active_players.remove(&id);
+    }
 
     fn periodic(&mut self) { }
 }

@@ -40,7 +40,7 @@ fn main() -> io::Result<()> {
     let global_listener = Arc::clone(&global);
     let listener = thread::Builder::new().name("server_listener".into()).spawn(move || {
         for (request, tcp_stream) in HttpIterator::new(8080, MAX_HTTP_REQUEST_SIZE).unwrap() {
-            foo(request, tcp_stream, &global_listener);
+            handle_connection(request, tcp_stream, &global_listener);
         }
     }).unwrap();
 
@@ -57,32 +57,18 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn foo(request: HttpRequest, mut tcp_stream: TcpStream, global: &Arc<CoolStuff>) {
-    match try_upgrade_connection(&request) {
-        Some(web_socket_upgrade_response) => {
-            if tcp_stream.write_all(web_socket_upgrade_response.as_bytes()).is_ok() {
-                let _ = global.on_new_web_socket_connection(request.resource_location(), tcp_stream);
-            }
-        },
-        None => { // that wasn't a WebSocket request !
-            let _ = send_resource(&request, &mut tcp_stream);
-        },
-    }
-}
+fn handle_connection(request: HttpRequest, mut tcp_stream: TcpStream, global: &Arc<CoolStuff>) {
+    if let Some(sec_key) = request.get_header_value("Sec-WebSocket-Key") {
+        let to_hash = format!("{}{}", sec_key, WEBSOCKET_SECURE_KEY_MAGIC_NUMBER);
+        let digest = to_base64(&Sha1::from(to_hash.as_bytes()).digest().bytes());
+        let response = format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n", digest);
 
-fn try_upgrade_connection(request: &HttpRequest) -> Option<String> {
-    if request.get_header_value("Upgrade") == Some("websocket") {
-        match request.get_header_value("Sec-WebSocket-Key") {
-            Some(key) => {
-                if !key.is_ascii() { return None };
-                let to_hash = format!("{}{}", key, WEBSOCKET_SECURE_KEY_MAGIC_NUMBER);
-                let response = to_base64(&Sha1::from(to_hash.as_bytes()).digest().bytes());
-                // NOTE: excludes header: nSec-WebSocket-Protocol: chat
-                Some(format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n", response))
-            },
-            None => None,
+        if tcp_stream.write_all(response.as_bytes()).is_ok() {
+            let _ = global.on_new_web_socket_connection(request.resource_location(), tcp_stream);
         }
+
     } else {
-        None
+        // just a regular old http request!
+        let _ = send_resource(&request, &mut tcp_stream);
     }
 }

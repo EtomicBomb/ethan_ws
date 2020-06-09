@@ -1,9 +1,9 @@
-use crate::apps::{GlobalState, PeerId, StreamState, TcpStreamWriter};
+use crate::apps::{GlobalState, PeerId, Drop};
 use std::io::{BufReader, BufRead};
 use std::fs::File;
 use crate::GOD_SET_PATH;
 use json::Json;
-use web_socket::WebSocketMessage;
+use web_socket::{WebSocketMessage, WebSocketWriter};
 
 pub struct GodSetGlobalState {
     json: String,
@@ -44,11 +44,11 @@ impl GodSetGlobalState {
 }
 
 impl GlobalState for GodSetGlobalState {
-    fn new_peer(&mut self, _id: PeerId, mut tcp_stream: TcpStreamWriter) {
-        tcp_stream.write_text_or_drop(self.json.clone());
+    fn new_peer(&mut self, _id: PeerId, mut tcp_stream: WebSocketWriter) {
+        let _ = tcp_stream.write_string(&self.json);
     }
 
-    fn on_message_receive(&mut self, _id: PeerId, _message: WebSocketMessage) -> StreamState { StreamState::Drop }
+    fn on_message_receive(&mut self, _id: PeerId, _message: WebSocketMessage) -> Result<(), Drop> { Err(Drop) }
 
     fn on_drop(&mut self, _id: PeerId) { }
 

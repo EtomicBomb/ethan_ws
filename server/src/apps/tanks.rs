@@ -3,11 +3,11 @@ use std::time::{UNIX_EPOCH, SystemTime};
 use rand::{thread_rng, Rng, random};
 
 use crate::{GOD_SET_PATH};
-use crate::apps::{GlobalState, PeerId, StreamState, TcpStreamWriter};
+use crate::apps::{GlobalState, PeerId, Drop};
 use json::Json;
 use std::str::FromStr;
 use rand::seq::SliceRandom;
-use web_socket::WebSocketMessage;
+use web_socket::{WebSocketMessage, WebSocketWriter};
 use std::fs::File;
 use std::io::{BufReader, BufRead};
 
@@ -28,24 +28,44 @@ pub struct TanksGlobalState {
 }
 
 impl GlobalState for TanksGlobalState {
-    fn new_peer(&mut self, id: PeerId, tcp_stream: TcpStreamWriter) {
+    fn new_peer(&mut self, id: PeerId, tcp_stream: WebSocketWriter) {
         self.new_player(id, tcp_stream);
         self.announce();
     }
     
-    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> StreamState {
-        if !self.has_player(id) { return StreamState::Drop } // that means we're dead!
+    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> Result<(), Drop> {
+        if !self.has_player(id) { return Err(Drop) } // that means we're dead!
 
-        match helper(self, id, message) {
-            Some(_) => StreamState::Keep,
-            None => {
-                self.remove_player(id);
-                StreamState::Drop
+        let a = Json::from_str(message.get_text()?).ok()?;
+        let map = a.get_object()?;
+
+        match map.get("kind")?.get_string()? {
+            "updateFacing" => {
+                self.update_facing(id, map.get("newFacing")?.get_number()?);
+                self.announce();
+                Ok(())
             },
+            "guess" => {
+                if self.guessed_correctly(id, map.get("guessIsLeft")?.get_bool()?) {
+                    self.announce();
+                    Ok(())
+                } else {
+                    Err(Drop)
+                }
+            },
+            "fire" => {
+                // boom bam bop
+                self.shoot_laser(id);
+                self.announce();
+                Ok(())
+            },
+            _ => Err(Drop),
         }
     }
 
-    fn on_drop(&mut self, _id: PeerId) { }
+    fn on_drop(&mut self, id: PeerId) {
+        self.remove_player(id);
+    }
 
     fn periodic(&mut self) { }
 }
@@ -83,7 +103,7 @@ impl TanksGlobalState {
         for id in self.players.keys().cloned().collect::<Vec<PeerId>>() {
             let message = self.game_state_message_to(id).to_string();
             let writer = &mut self.players.get_mut(&id).unwrap().tcp_stream;
-            writer.write_text_or_drop(message);
+            let _ = writer.write_string(&message);
         }
     }
 
@@ -91,11 +111,11 @@ impl TanksGlobalState {
         let tcp_stream = &mut self.players.get_mut(&id).unwrap().tcp_stream;
         let mut map = HashMap::new();
         map.insert("kind".into(), Json::String("kill".into()));
-        tcp_stream.write_json_or_drop(Json::Object(map));
+        let _ = tcp_stream.write_string(&Json::Object(map).to_string());
         self.remove_player(id);
     }
 
-    fn new_player(&mut self, id: PeerId, tcp_stream: TcpStreamWriter) {
+    fn new_player(&mut self, id: PeerId, tcp_stream: WebSocketWriter) {
         self.players.insert(id, PlayerInfo::from_random(&self.questions, tcp_stream));
     }
 
@@ -224,11 +244,11 @@ struct PlayerInfo {
     color: String,
     shield: usize,
     question: Question,
-    tcp_stream: TcpStreamWriter,
+    tcp_stream: WebSocketWriter,
 }
 
 impl PlayerInfo {
-    fn from_random(questions: &[(String, String)], tcp_stream: TcpStreamWriter) -> PlayerInfo {
+    fn from_random(questions: &[(String, String)], tcp_stream: WebSocketWriter) -> PlayerInfo {
         PlayerInfo {
             x: thread_rng().gen_range(0.0, MAP_WIDTH as f64),
             y: thread_rng().gen_range(0.0, MAP_HEIGHT as f64),
@@ -294,36 +314,6 @@ impl Question {
         (guess_is_left && self.left_correct) || (!guess_is_left && !self.left_correct)
     }
 }
-
-fn helper(global: &mut TanksGlobalState, id: PeerId, message: WebSocketMessage) -> Option<()> {
-    let a = Json::from_str(message.get_text()?).ok()?;
-    let map = a.get_object()?;
-
-    match map.get("kind")?.get_string()? {
-        "updateFacing" => {
-            global.update_facing(id, map.get("newFacing")?.get_number()?);
-            global.announce();
-            Some(())
-        },
-        "guess" => {
-            if global.guessed_correctly(id, map.get("guessIsLeft")?.get_bool()?) {
-                global.announce();
-                Some(())
-            } else {
-                None
-            }
-        },
-        "fire" => {
-            // boom bam bop
-            global.shoot_laser(id);
-            global.announce();
-            Some(())
-        },
-        _ => None,
-    }
-}
-
-
 
 fn intersect_circle(circle_x: f64, circle_y: f64, radius: f64, ray_x: f64, ray_y: f64, ray_angle: f64) -> bool {
     let b = circle_y * ray_angle.sin() - circle_x * ray_angle.cos() + ray_x * ray_angle.cos() - ray_y * ray_angle.sin();

@@ -1,6 +1,6 @@
-use crate::apps::{PeerId, TcpStreamWriter, StreamState, GlobalState};
+use crate::apps::{PeerId, Drop, GlobalState};
 use std::collections::HashMap;
-use web_socket::WebSocketMessage;
+use web_socket::{WebSocketMessage, WebSocketWriter};
 use json::{jsont, Json};
 use rand::{random, thread_rng, Rng};
 use std::str::FromStr;
@@ -13,15 +13,15 @@ pub struct ArenaGlobalState {
 }
 
 impl GlobalState for ArenaGlobalState {
-    fn new_peer(&mut self, id: PeerId, writer: TcpStreamWriter) {
+    fn new_peer(&mut self, id: PeerId, writer: WebSocketWriter) {
         self.players.insert(id, Player::new(writer));
         // self.announce();
     }
 
-    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> StreamState {
+    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> Result<(), Drop> {
         match self.message_receive_handler(id, message) {
-            Some(()) => StreamState::Keep,
-            None => StreamState::Drop,
+            Some(()) => Ok(()),
+            None => Err(Drop),
         }
     }
 
@@ -62,7 +62,7 @@ impl ArenaGlobalState {
 
             let json_string = Json::Array(array).to_string();
 
-            self.players.get_mut(&id).unwrap().writer.write_text_or_drop(json_string);
+            let _ = self.players.get_mut(&id).unwrap().writer.write_string(&json_string);
         }
 
 
@@ -73,14 +73,14 @@ impl ArenaGlobalState {
 }
 
 struct Player {
-    writer: TcpStreamWriter,
+    writer: WebSocketWriter,
     color: Json,
     x: f64,
     y: f64,
 }
 
 impl Player {
-    fn new(writer: TcpStreamWriter) -> Player {
+    fn new(writer: WebSocketWriter) -> Player {
         Player {
             writer,
             color: jsont!({r: (random::<u8>()), g:(random::<u8>()), b:(random::<u8>())}),

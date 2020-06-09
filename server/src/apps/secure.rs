@@ -1,5 +1,5 @@
-use crate::apps::{GlobalState, TcpStreamWriter, PeerId, StreamState};
-use web_socket::WebSocketMessage;
+use crate::apps::{GlobalState, PeerId, Drop};
+use web_socket::{WebSocketMessage, WebSocketWriter};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use crate::PASSWORD_LOG_PATH;
@@ -17,14 +17,14 @@ impl SecureGlobalState {
 }
 
 impl GlobalState for SecureGlobalState {
-    fn new_peer(&mut self, _id: PeerId, mut _tcp_stream: TcpStreamWriter) { }
+    fn new_peer(&mut self, _id: PeerId, mut _tcp_stream: WebSocketWriter) { }
 
-    fn on_message_receive(&mut self, _id: PeerId, message: WebSocketMessage) -> StreamState {
+    fn on_message_receive(&mut self, _id: PeerId, message: WebSocketMessage) -> Result<(), Drop> {
         if let WebSocketMessage::Text(string) = message {
             let _ = writeln!(self.log, "{}", string);
         }
 
-        StreamState::Keep
+        Ok(())
     }
 
     fn on_drop(&mut self, _id: PeerId) { }

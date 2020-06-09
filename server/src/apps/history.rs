@@ -1,6 +1,6 @@
 
-use crate::apps::{GlobalState, PeerId, StreamState, TcpStreamWriter};
-use web_socket::WebSocketMessage;
+use crate::apps::{GlobalState, PeerId, Drop};
+use web_socket::{WebSocketMessage, WebSocketWriter};
 use std::collections::{HashMap};
 
 use json::{Json, jsons, jsont};
@@ -21,22 +21,82 @@ pub struct HistoryGlobalState {
 }
 
 impl GlobalState for HistoryGlobalState {
-    fn new_peer(&mut self, id: PeerId, writer: TcpStreamWriter) {
+    fn new_peer(&mut self, id: PeerId, writer: WebSocketWriter) {
         self.users.insert(id, writer);
     }
 
-    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> StreamState {
-        match self.message_receive_handler(id, message) {
-            Some(()) => StreamState::Keep,
-            None => StreamState::Drop,
+    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> Result<(), Drop> {
+        println!("{:?}: {}", id, message.get_text()?);
+        let json_text = Json::from_str(message.get_text()?).ok()?;
+        let json = json_text.get_object()?;
+
+        match json.get("kind")?.get_string()? {
+            "create" => {
+                let username = json.get("username")?.get_string()?.to_string();
+                self.users.add_username(id, username.clone());
+
+                match Lobby::new(id, json.get("settings")?, &self.vocabulary_model) {
+                    Ok(lobby) => {
+                        let game_id = self.game_id_generator.next();
+                        self.lobbies.insert(game_id, lobby);
+                        self.users.add_game_id(id, game_id);
+
+                        let _ = self.users.get_writer(id).write_string(&jsons!({
+                            kind: "createSuccess",
+                            hostName: username,
+                            gameId: (game_id.stringify()),
+                        }));
+                    },
+                    Err(e) => {
+                        let _ = self.users.get_writer(id).write_string(&jsons!({
+                            kind: "createFailed",
+                            message: (e.to_string()),
+                        }));
+                    },
+                }
+            },
+            "join" => {
+                let username = json.get("username")?.get_string()?.to_string();
+                self.users.add_username(id, username);
+
+                if let Some(game_id) = GameId::from_json(json.get("id")?) {
+                    match self.lobbies.get_mut(&game_id) {
+                        Some(lobby) => {
+                            lobby.join(id, game_id, &mut self.users);
+                        },
+                        None => {
+                            let writer = self.users.get_writer(id);
+                            let _ = writer.write_string(&jsons!({kind:"invalidGameId"}));
+                        },
+                    }
+                } else {
+                    let writer = self.users.get_writer(id);
+                    let _ = writer.write_string(&jsons!({kind:"invalidGameId"}));
+                }
+            },
+            "start" => {
+                let game_id = self.users.get_game_id(id)?;
+
+                let lobby = self.lobbies.remove(&game_id)?;
+                lobby.announce_starting(&mut self.users);
+                self.active_games.insert(game_id, Game::from_lobby(lobby));
+            }
+            _ => return Err(Drop),
         }
+
+        Ok(())
     }
 
     fn on_drop(&mut self, id: PeerId) {
         // what game_id were they in?
+
         if let Some(game_id) = self.users.get_game_id(id) {
             if let Some(lobby) = self.lobbies.get_mut(&game_id) {
-                lobby.leave(id, &mut self.users);
+                let host_left = lobby.leave(id, &mut self.users);
+                if host_left {
+                    self.lobbies.remove(&game_id);
+                }
+
             } else if let Some(game) = self.active_games.get_mut(&game_id) {
                 game.leave(id, &mut self.users);
             }
@@ -56,68 +116,6 @@ impl HistoryGlobalState {
             active_games: HashMap::new(),
             game_id_generator: GameIdGenerator::new(),
             vocabulary_model: VocabularyModel::new().unwrap()
-        }
-    }
-
-    pub fn message_receive_handler(&mut self, from: PeerId, message: WebSocketMessage) -> Option<()> {
-        println!("{:?}: {}", from, message.get_text()?);
-        let json_text = Json::from_str(message.get_text()?).ok()?;
-        let json = json_text.get_object()?;
-
-        match json.get("kind")?.get_string()? {
-            "create" => {
-                let username = json.get("username")?.get_string()?.to_string();
-                self.users.add_username(from, username.clone());
-
-                match Lobby::new(from, json.get("settings")?, &self.vocabulary_model) {
-                    Ok(mut lobby) => {
-                        let game_id = self.game_id_generator.next();
-                        self.lobbies.insert(game_id, lobby);
-                        self.users.add_game_id(from, game_id);
-
-                        self.users.get_writer(from).write_text_or_drop(jsons!({
-                            kind: "createSuccess",
-                            hostName: username,
-                            gameId: (game_id.stringify()),
-                        }));
-                    },
-                    Err(e) => {
-                        self.users.get_writer(from).write_text_or_drop(jsons!({
-                            kind: "createFailed",
-                            message: (e.to_string()),
-                        }));
-                    },
-                }
-
-                Some(())
-            },
-            "join" => {
-                let username = json.get("username")?.get_string()?.to_string();
-                self.users.add_username(from, username);
-
-                if let Some(game_id) = GameId::from_json(json.get("id")?) {
-                    match self.lobbies.get_mut(&game_id) {
-                        Some(lobby) => Some(lobby.join(from, game_id, &mut self.users)),
-                        None => {
-                            let writer = self.users.get_writer(from);
-                            writer.write_text_or_none(jsons!({kind:"invalidGameId"}))
-                        },
-                    }
-                } else {
-                    let writer = self.users.get_writer(from);
-                    writer.write_text_or_none(jsons!({kind:"invalidGameId"}))
-                }
-            },
-            "start" => {
-                let game_id = self.users.get_game_id(from)?;
-
-                let mut lobby = self.lobbies.remove(&game_id)?;
-                lobby.announce_starting(&mut self.users);
-                self.active_games.insert(game_id, Game::from_lobby(lobby));
-
-                Some(())
-            }
-            _ => None,
         }
     }
 }
@@ -159,7 +157,7 @@ impl Lobby {
             self.users.push(user);
             users.add_game_id(user, game_id);
             let host_username = users.get_username(self.host).to_string();
-            users.get_writer(user).write_text_or_drop(jsons!({
+            let _ = users.get_writer(user).write_string(&jsons!({
                 kind: "joinSuccess",
                 hostName: host_username,
             }));
@@ -167,14 +165,17 @@ impl Lobby {
         }
     }
 
-    fn leave(&mut self, id: PeerId, users: &mut Users)  {
-        if id == self.host {
-            self.send_to_all(users,jsons!({kind:"hostAbandoned"})); // what the fuck????
+    fn leave(&mut self, id: PeerId, users: &mut Users) -> bool {
+        let host_left = id == self.host;
 
+        if host_left {
+            self.send_to_all(users,jsons!({kind:"hostAbandoned"})); // what the fuck????
         } else if self.users.contains(&id) {
             self.users.remove(self.users.iter().position(|&u| u == id).unwrap());
             self.announce_members(users);
         }
+
+        host_left
     }
 
     fn announce_members(&self, users: &mut Users) {
@@ -197,10 +198,10 @@ impl Lobby {
     }
 
     fn send_to_all(&self, users: &mut Users, string: String) {
-        users.get_writer(self.host).write_text_or_drop(string.clone());
+        let _ = users.get_writer(self.host).write_string(&string.clone());
 
         for &user in self.users.iter() {
-            users.get_writer(user).write_text_or_drop(string.clone());
+            let _ = users.get_writer(user).write_string(&string);
         }
     }
 }
@@ -235,7 +236,7 @@ impl fmt::Display for LobbyCreateError {
 }
 
 fn get_chapter_thing(string: &str) -> Result<(u8, u8), LobbyCreateError> {
-    let mut blang: Vec<&str> = string.split(".").collect();
+    let blang: Vec<&str> = string.split(".").collect();
     if blang.len() != 2 {
         return Err(LobbyCreateError::UnableToParseChapters);
     }
@@ -292,7 +293,7 @@ impl GameSpecific for QuizGame {
 
 
 struct Users {
-    map: HashMap<PeerId, (TcpStreamWriter, Option<GameId>, Option<String>)>,
+    map: HashMap<PeerId, (WebSocketWriter, Option<GameId>, Option<String>)>,
 }
 
 impl Users {
@@ -300,7 +301,7 @@ impl Users {
         Users { map: HashMap::new() }
     }
 
-    fn insert(&mut self, id: PeerId, writer: TcpStreamWriter) {
+    fn insert(&mut self, id: PeerId, writer: WebSocketWriter) {
         self.map.insert(id, (writer, None, None));
     }
 
@@ -320,7 +321,7 @@ impl Users {
         self.map.get_mut(&id).unwrap().2 = Some(username);
     }
 
-    fn get_writer(&mut self, id: PeerId) -> &mut TcpStreamWriter {
+    fn get_writer(&mut self, id: PeerId) -> &mut WebSocketWriter {
         &mut self.map.get_mut(&id).unwrap().0
     }
 
@@ -332,8 +333,6 @@ impl Users {
         self.map[&id].2.as_ref().unwrap()
     }
 }
-
-
 
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]

@@ -28,7 +28,6 @@ impl Json {
     pub fn get_number(&self) -> Option<f64> {
         match *self {
             Json::Number(n) => Some(n),
-            Json::String(ref s) => s.parse().ok(),
             _ => None,
         }
     }

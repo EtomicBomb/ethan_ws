@@ -22,8 +22,8 @@ socket.onmessage = msg => {
 };
 
 function joinGameButtonHandler() {
-    let id = document.getElementById("joinGameIdInput").value;
     let username = document.getElementById("username").value;
+    let id = +document.getElementById("joinGameIdInput").value;
 
     socket.send(JSON.stringify({
         kind: "join",
