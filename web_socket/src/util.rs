@@ -1,6 +1,7 @@
 use std::net::TcpStream;
 use std::io;
-use std::io::Write;
+use std::io::{Write, Read, BufWriter};
+use crate::listener::CoolError;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum FrameKind {
@@ -51,24 +52,3 @@ impl PayloadLength {
         }
     }
 }
-
-pub fn write_frame(tcp_stream: &mut TcpStream, payload: &[u8], frame_kind: FrameKind) -> io::Result<()> {
-    let len = payload.len();
-    let len_descriptor = PayloadLength::from_len(len);
-
-    let mut ret = vec![0b_1000_0000 | frame_kind as u8, len_descriptor.to_byte()];
-
-    match len_descriptor {
-        PayloadLength::Small(_) => {},
-        PayloadLength::Extended =>
-            ret.extend_from_slice(&(len as u64).to_be_bytes()[6..]),
-        PayloadLength::ExtraExtended =>
-            ret.extend_from_slice(&(len as u64).to_be_bytes()),
-    }
-
-    ret.extend_from_slice(payload);
-
-    tcp_stream.write_all(&ret)
-}
-
-

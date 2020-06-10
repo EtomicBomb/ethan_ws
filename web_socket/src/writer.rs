@@ -1,27 +1,42 @@
 use std::net::TcpStream;
 use std::io;
-use crate::util::{FrameKind, write_frame};
+use crate::util::{FrameKind, PayloadLength};
+use std::io::{Write, BufWriter};
 
 #[derive(Debug)]
 pub struct WebSocketWriter {
-    tcp_stream: TcpStream,
+    writer: BufWriter<TcpStream>,
 }
 
 impl WebSocketWriter {
     pub fn new(tcp_stream: TcpStream) -> WebSocketWriter {
-        WebSocketWriter { tcp_stream }
+        WebSocketWriter { writer: BufWriter::new(tcp_stream) }
     }
 
     pub fn write_string(&mut self, string: &str) -> io::Result<()> {
-        self.write(string.as_bytes(), FrameKind::Text)
+        write_frame(&mut self.writer, string.as_bytes(), FrameKind::Text)
     }
 
     pub fn write_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
-        self.write(bytes, FrameKind::Binary)
-    }
-
-    fn write(&mut self, payload: &[u8], frame_kind: FrameKind) -> io::Result<()> {
-        write_frame(&mut self.tcp_stream, payload, frame_kind)
+        write_frame(&mut self.writer, bytes, FrameKind::Binary)
     }
 }
 
+pub fn write_frame(writer: &mut impl Write, payload: &[u8], frame_kind: FrameKind) -> io::Result<()> {
+    let len = payload.len();
+    let len_descriptor = PayloadLength::from_len(len);
+
+    writer.write_all(&[0b_1000_0000 | frame_kind as u8, len_descriptor.to_byte()])?;
+
+    match len_descriptor {
+        PayloadLength::Small(_) => {},
+        PayloadLength::Extended =>
+            writer.write_all(&(len as u64).to_be_bytes()[6..])?,
+        PayloadLength::ExtraExtended =>
+            writer.write_all(&(len as u64).to_be_bytes())?,
+    }
+
+    writer.write_all(payload)?;
+
+    writer.flush()
+}
