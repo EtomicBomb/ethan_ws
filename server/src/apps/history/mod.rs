@@ -1,21 +1,22 @@
-
 use crate::apps::{GlobalState, PeerId, Drop};
 use web_socket::{WebSocketMessage, WebSocketWriter};
 use std::collections::{HashMap};
 
 use json::{Json, jsons, jsont};
 use std::str::FromStr;
-use std::io::{BufReader, BufRead};
-use std::fs::File;
-use crate::GOD_SET_PATH;
 use std::option::NoneError;
 use std::fmt;
 use std::fmt::Debug;
+use crate::apps::history::quiz_game::QuizGame;
+use crate::apps::history::vocabulary_model::{TermId, VocabularyModel, Query};
+
+mod quiz_game;
+mod vocabulary_model;
 
 pub struct HistoryGlobalState {
     users: Users,
     lobbies: HashMap<GameId, Lobby>,
-    active_games: HashMap<GameId, Game>,
+    active_games: HashMap<GameId, Box<dyn GameSpecific>>,
     game_id_generator: GameIdGenerator,
     vocabulary_model: VocabularyModel,
 }
@@ -79,9 +80,15 @@ impl GlobalState for HistoryGlobalState {
 
                 let lobby = self.lobbies.remove(&game_id)?;
                 lobby.announce_starting(&mut self.users);
-                self.active_games.insert(game_id, Game::from_lobby(lobby));
+                self.active_games.insert(game_id, lobby.into_game(&mut self.vocabulary_model, &mut self.users));
             }
-            _ => return Err(Drop),
+            _ => {
+                if let Some(game_id) = self.users.get_game_id(id) {
+                    if let Some(active_game) = self.active_games.get_mut(&game_id) {
+                        active_game.receive_message(id, json, &mut self.users, &mut self.vocabulary_model)?;
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -98,14 +105,22 @@ impl GlobalState for HistoryGlobalState {
                 }
 
             } else if let Some(game) = self.active_games.get_mut(&game_id) {
-                game.leave(id, &mut self.users);
+                let host_left = game.leave(id, &mut self.users, &mut self.vocabulary_model);
+                if host_left {
+                    self.active_games.remove(&game_id);
+                }
+
             }
         }
 
         self.users.remove(id);
     }
 
-    fn periodic(&mut self) { }
+    fn periodic(&mut self) {
+        for game in self.active_games.values_mut() {
+            game.periodic(&mut self.users, &mut self.vocabulary_model);
+        }
+    }
 }
 
 impl HistoryGlobalState {
@@ -120,12 +135,13 @@ impl HistoryGlobalState {
     }
 }
 
+
 #[derive(Debug)]
 struct Lobby {
     host: PeerId,
-    users: Vec<PeerId>,
-    terms: Vec<TermId>,
-    game_specific: Box<dyn GameSpecific>,
+    peers: Vec<PeerId>,
+    query: Query,
+    game_kind: GameKind,
 }
 
 impl Lobby {
@@ -135,26 +151,25 @@ impl Lobby {
         let start = get_chapter_thing(json_map.get("startSection")?.get_string()?)?;
         let end = get_chapter_thing(json_map.get("endSection")?.get_string()?)?;
 
-        let terms = vocabulary.terms_in_range(start, end);
 
-        if terms.is_empty() {
+        let query = vocabulary.get_query(start, end);
+
+        if !vocabulary.query_is_valid(query) {
             return Err(LobbyCreateError::BlankRange);
         }
 
-        let game_specific =
-            match json_map.get("gameKind")?.get_string()? {
-                "gameKindQuiz" => Box::new(QuizGame::new()),
-                "gameKindRocket" => return Err(LobbyCreateError::Other), // TODO
-                "gameKindClicker" => return Err(LobbyCreateError::Other), // TODO
-                _ => return Err(LobbyCreateError::Other),
-            };
+        let game_kind = GameKind::from_str(json_map.get("gameKind")?.get_string()?)?;
 
-        Ok(Lobby { host, users: Vec::new(), terms, game_specific })
+        Ok(Lobby { host, peers: Vec::new(), query, game_kind })
+    }
+
+    fn into_game(self, vocabulary: &mut VocabularyModel, users: &mut Users) -> Box<dyn GameSpecific> {
+        self.game_kind.into_game(self.host, self.peers, self.query, vocabulary, users)
     }
 
     fn join(&mut self, user: PeerId, game_id: GameId, users: &mut Users) {
-        if !self.users.contains(&user) {
-            self.users.push(user);
+        if !self.peers.contains(&user) {
+            self.peers.push(user);
             users.add_game_id(user, game_id);
             let host_username = users.get_username(self.host).to_string();
             let _ = users.get_writer(user).write_string(&jsons!({
@@ -170,8 +185,8 @@ impl Lobby {
 
         if host_left {
             self.send_to_all(users,jsons!({kind:"hostAbandoned"})); // what the fuck????
-        } else if self.users.contains(&id) {
-            self.users.remove(self.users.iter().position(|&u| u == id).unwrap());
+        } else if self.peers.contains(&id) {
+            self.peers.remove(self.peers.iter().position(|&u| u == id).unwrap());
             self.announce_members(users);
         }
 
@@ -181,7 +196,7 @@ impl Lobby {
     fn announce_members(&self, users: &mut Users) {
         let string = jsons!({
             kind: "refreshLobby",
-            users: (Json::Array(self.users.iter().map(|&u| Json::String(users.get_username(u).to_string())).collect())),
+            users: (Json::Array(self.peers.iter().map(|&u| Json::String(users.get_username(u).to_string())).collect())),
         });
 
         self.send_to_all(users, string);
@@ -191,7 +206,7 @@ impl Lobby {
         let string = jsons!({
             kind: "startingGame",
             host: (users.get_username(self.host)),
-            users: (Json::Array(self.users.iter().map(|&u| Json::String(users.get_username(u).to_string())).collect())),
+            users: (Json::Array(self.peers.iter().map(|&u| Json::String(users.get_username(u).to_string())).collect())),
         });
 
         self.send_to_all(users, string);
@@ -200,11 +215,38 @@ impl Lobby {
     fn send_to_all(&self, users: &mut Users, string: String) {
         let _ = users.get_writer(self.host).write_string(&string.clone());
 
-        for &user in self.users.iter() {
+        for &user in self.peers.iter() {
             let _ = users.get_writer(user).write_string(&string);
         }
     }
 }
+
+#[derive(Copy, Clone, Debug)]
+enum GameKind {
+    Quiz,
+    Rocket,
+    Clicker,
+}
+
+impl GameKind {
+    fn from_str(string: &str) -> Result<GameKind, LobbyCreateError> {
+        match string {
+            "gameKindQuiz" => Ok(GameKind::Quiz),
+            "gameKindRocket" => Ok(GameKind::Rocket),
+            "gameKindClicker" => Ok(GameKind::Clicker),
+            _ => Err(LobbyCreateError::Other),
+        }
+    }
+
+    fn into_game(self, host: PeerId, peers: Vec<PeerId>, query: Query, vocabulary: &mut VocabularyModel, users: &mut Users) -> Box<dyn GameSpecific> {
+        match self {
+            GameKind::Quiz => Box::new(QuizGame::new(host, peers, query, vocabulary, users)),
+            GameKind::Rocket => Box::new(QuizGame::new(host, peers, query, vocabulary, users)),
+            GameKind::Clicker => Box::new(QuizGame::new(host, peers, query, vocabulary, users)),
+        }
+    }
+}
+
 
 #[derive(Copy, Clone )]
 enum LobbyCreateError {
@@ -248,51 +290,53 @@ fn get_chapter_thing(string: &str) -> Result<(u8, u8), LobbyCreateError> {
 }
 
 
-struct Game {
-    host: PeerId,
-    users: Vec<PeerId>,
-    terms: Vec<TermId>,
-    game_specific: Box<dyn GameSpecific>,
-}
-
-impl Game {
-    fn from_lobby(lobby: Lobby) -> Game {
-        Game {
-            host: lobby.host,
-            users: lobby.users,
-            terms: lobby.terms,
-            game_specific: lobby.game_specific,
-        }
-    }
-
-    fn leave(&mut self, id: PeerId, users: &mut Users) {
-        todo!("game leave")
-    }
-
-
-}
+// struct Game {
+//     host: PeerId,
+//     users: Vec<PeerId>,
+//     terms: Vec<TermId>,
+//     game_specific: Box<dyn GameSpecific>,
+// }
+//
+// impl Game {
+//     fn from_lobby(lobby: Lobby) -> Game {
+//         Game {
+//             host: lobby.host,
+//             users: lobby.users,
+//             terms: lobby.terms,
+//             game_specific: lobby.game_specific,
+//         }
+//     }
+//
+//     /// returns true if host left
+//     fn leave(&mut self, id: PeerId, users: &mut Users) -> bool {
+//         let host_left = id == self.host;
+//
+//         if host_left {
+//             self.send_to_all(users,jsons!({kind:"hostAbandoned"})); // what the fuck????
+//         } else if self.users.contains(&id) {
+//             self.game_specific.leave(id, users);
+//             self.users.remove(self.users.iter().position(|&u| u == id).unwrap());
+//         }
+//
+//         host_left
+//     }
+//
+//     fn receive_message(&mut self, id: PeerId, message: &HashMap<String, Json>, users: &mut Users) -> Result<(), Drop> {
+//         self.game_specific.receive_message(id, message, users)
+//     }
+//
+//     fn periodic(&mut self, users: &mut Users) {
+//         self.game_specific.periodic(users);
+//     }
+// }
 
 trait GameSpecific: Send+Debug {
-
+    fn receive_message(&mut self, id: PeerId, message: &HashMap<String, Json>, users: &mut Users, vocabulary: &mut VocabularyModel) -> Result<(), Drop>;
+    fn periodic(&mut self, users: &mut Users, vocabulary: &mut VocabularyModel);
+    fn leave(&mut self, id: PeerId, users: &mut Users, vocabulary: &mut VocabularyModel) -> bool;
 }
 
-#[derive(Debug)]
-struct QuizGame {
-
-}
-
-impl QuizGame {
-    fn new() -> QuizGame {
-        QuizGame { }
-    }
-}
-
-impl GameSpecific for QuizGame {
-
-}
-
-
-struct Users {
+pub struct Users {
     map: HashMap<PeerId, (WebSocketWriter, Option<GameId>, Option<String>)>,
 }
 
@@ -307,10 +351,6 @@ impl Users {
 
     fn remove(&mut self, id: PeerId) {
         self.map.remove(&id);
-    }
-
-    fn contains(&self, id: PeerId) -> bool {
-        self.map.contains_key(&id)
     }
 
     fn add_game_id(&mut self, id: PeerId, game_id: GameId) {
@@ -359,64 +399,5 @@ impl GameIdGenerator {
     }
 }
 
-
-struct VocabularyModel {
-    terms: HashMap<TermId, Term>,
-}
-
-
-impl VocabularyModel {
-    fn new() -> Option<VocabularyModel> {
-        let file = BufReader::new(File::open(GOD_SET_PATH).unwrap());
-
-        let terms = file.lines().zip(1..)
-            .map(|(line, i)| Some((TermId(i), Term::from_line(line.ok()?)?)))
-            .collect::<Option<HashMap<TermId, Term>>>()?;
-
-        Some(VocabularyModel { terms })
-    }
-
-    fn terms_in_range(&self, start: (u8, u8), end: (u8, u8)) -> Vec<TermId> {
-        self.terms.iter()
-            .filter(|&(_, term)| {
-                start <= (term.chapter, term.section) && (term.chapter, term.section) <= end
-            })
-            .map(|(&id, _)| id)
-            .collect()
-    }
-}
-
-#[derive(Clone)]
-struct Term {
-    chapter: u8,
-    section: u8,
-    year_start: u16,
-    year_end: u16,
-    social: bool,
-    political: bool,
-    economic: bool,
-    term: String,
-    definition: String,
-}
-
-impl Term {
-    fn from_line(line: String) -> Option<Term> {
-        let mut split = line.trim_end().split("\t");
-        Some(Term {
-            chapter: split.next()?.parse().ok()?,
-            section: split.next()?.parse().ok()?,
-            year_start: split.next()?.parse().ok()?,
-            year_end: split.next()?.parse().ok()?,
-            social: split.next()?.parse().ok()?,
-            political: split.next()?.parse().ok()?,
-            economic: split.next()?.parse().ok()?,
-            term: split.next()?.to_string(),
-            definition: split.next()?.to_string(),
-        })
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-struct TermId(u32);
 
 

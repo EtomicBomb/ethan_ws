@@ -8,19 +8,28 @@ socket.onmessage = msg => {
         document.getElementById("gameId").innerText = "Game ID: " + data.gameId;
         document.getElementById("hostName").innerText = data.hostName + "'s Lobby";
 
-        transitionToLobby();
+        document.getElementById("createMenu").style.display = "none";
+        document.getElementById("lobby").style.display = "block";
+    
 
     } else if (data.kind == "createFailed") {
         document.getElementById("errorLabel").innerText = data.message;
 
     } else if (data.kind == "refreshLobby") {
         document.getElementById("members").value = data.users.join("\n");
+    } else if (data.kind == "initialStuff") {
+        document.getElementById("lobby").style.display = "none";
+        document.getElementById("game").style.display = "block";
+
+
+
     }
 };
 
-function transitionToLobby() {
-    document.getElementById("createMenu").style.display = "none";
-    document.getElementById("lobby").style.display = "block";
+function nextQuestionHandler() {
+    socket.send(JSON.stringify({
+        kind: "nextQuestion"
+    }));
 }
 
 function createGameButtonHandler() {

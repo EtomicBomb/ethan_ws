@@ -1,4 +1,3 @@
-
 #![feature(try_trait)]
 
 extern crate web_socket;
@@ -31,9 +30,6 @@ const PASSWORD_LOG_PATH: &'static str = "/home/pi/Desktop/server/passwordLog.txt
 const WEBSOCKET_SECURE_KEY_MAGIC_NUMBER: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const PERIOD_LENGTH: Duration = Duration::from_millis(100);
 
-// https://tools.ietf.org/html/rfc6455
-// https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
-
 fn main() -> io::Result<()> {
     let global = Arc::new(CoolStuff::new().unwrap());
 
@@ -64,7 +60,7 @@ fn handle_connection(request: HttpRequest, mut tcp_stream: TcpStream, global: &A
         let response = format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n", digest);
 
         if tcp_stream.write_all(response.as_bytes()).is_ok() {
-            let _ = global.on_new_web_socket_connection(request.resource_location(), tcp_stream);
+            global.on_new_web_socket_connection(request.resource_location(), tcp_stream);
         }
 
     } else {

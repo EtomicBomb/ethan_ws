@@ -41,25 +41,22 @@ impl CoolStuff {
     }
 
     pub fn on_new_web_socket_connection(&self, location: &str, tcp_stream: TcpStream) {
-        match self.map.get(location) {
-            Some(deal) => {
-                let id = self.peer_id_generator.next();
+        if let Some(deal) = self.map.get(location) {
+            let id = self.peer_id_generator.next();
 
-                deal.lock().unwrap().new_peer(id, WebSocketWriter::new(tcp_stream.try_clone().unwrap()));
+            deal.lock().unwrap().new_peer(id, WebSocketWriter::new(tcp_stream.try_clone().unwrap()));
 
-                let state = Arc::clone(&self.map[location]);
-                thread::Builder::new().name(format!("server{}/{}", location, id.0)).spawn(move || {
-                    for message in WebSocketListener::new(tcp_stream) {
-                        match state.lock().unwrap().on_message_receive(id, message) {
-                            Ok(()) => {},
-                            Err(Drop) => break,
-                        }
+            let state = Arc::clone(&self.map[location]);
+            thread::Builder::new().name(format!("server{}/{}", location, id.0)).spawn(move || {
+                for message in WebSocketListener::new(tcp_stream) {
+                    match state.lock().unwrap().on_message_receive(id, message) {
+                        Ok(()) => {},
+                        Err(Drop) => break,
                     }
+                }
 
-                    state.lock().unwrap().on_drop(id);
-                }).unwrap();
-            },
-            None => {},
+                state.lock().unwrap().on_drop(id);
+            }).unwrap();
         }
     }
 
@@ -87,14 +84,6 @@ impl From<io::Error> for Drop {
 impl From<NoneError> for Drop {
     fn from(_: NoneError) -> Drop { Drop }
 }
-
-// #[derive(Copy, Clone, Eq, PartialEq)]
-// pub enum StreamState {
-//     Keep,
-//     Drop,
-// }
-
-
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct PeerId(u64);

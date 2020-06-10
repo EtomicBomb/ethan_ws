@@ -18,8 +18,43 @@ socket.onmessage = msg => {
     } else if (data.kind == "hostAbandoned") {
         
 
+    } else if (data.kind == "initialStuff") {
+        document.getElementById("lobby").style.display = "none";
+        document.getElementById("game").style.display = "block";
+
+        let question = data.question;         
+        displayQuestion(question.definition, question.terms);
+
+    } else if (data.kind == "updateStuff") {
+        let wasCorrect = data.wasCorrect;
+
+        console.log("was correct " + wasCorrect)
+
+        document.getElementById("score").innerText = "Score: " + data.score;
+
+        let newQuestion = data.newQuestion;
+        displayQuestion(newQuestion.definition, newQuestion.terms);
     }
 };
+
+function displayQuestion(definition, terms) {
+    document.getElementById("definition").innerText = definition;
+
+    for (let i=0; i<4; i++) {
+        document.querySelector("label[for='answer"+i+"']").innerText = terms[i];
+        // document.getElementById("answer"+i).innerText = ;
+    }
+}
+
+function submitAnswerHandler(answer) {
+    // let answer = +document.querySelector("input[type=radio]:checked").id.slice(-1);
+    socket.send(JSON.stringify({
+        kind: "submitAnswer",
+        answer: answer,
+    }))
+
+
+}
 
 function joinGameButtonHandler() {
     let username = document.getElementById("username").value;

@@ -24,5 +24,27 @@
     <textarea id="members" readonly></textarea>
 </div>
 
+<div id="game">
+    <h1>Quiz</h1>
+    <p id="score">Score: </p>
+    <p id="definition">Definition</p>
+
+    
+    <div>
+        <button onclick="submitAnswerHandler(0)" id="answer0">A</button><label for="answer0"></label>    
+    </div>
+    <div>
+        <button onclick="submitAnswerHandler(1)" id="answer1">B</button><label for="answer1"></label>
+    </div> 
+    <div>
+        <button onclick="submitAnswerHandler(2)" id="answer2">C</button><label for="answer2"></label>
+    </div>
+    <div>
+        <button onclick="submitAnswerHandler(3)" id="answer3">D</button><label for="answer3"></label>
+    </div>
+
+    <!-- <button id="submitAnswer" onclick="submitAnswerHandler()">Submit Answer</button> -->
+</div>
+
 <script src="/history/join/index.js"></script>
 </body>

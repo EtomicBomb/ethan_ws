@@ -14,18 +14,21 @@
     <h1>Create an APUSH Game</h1>
     <p id="errorLabel"></p>
 
-    <label for="gameKindSelect">Select the game mode</label>
-    <select id="gameKindSelect">
-        <option value="gameKindQuiz">Quiz</option>
-        <option value="gameKindRocket">Rocket</option>
-        <option value="gameKindClicker">Clicker</option>
-    </select>
+    <div>
+        <label for="gameKindSelect">Select the game mode</label>
+        <select id="gameKindSelect">
+            <option value="gameKindQuiz">Quiz</option>
+            <option value="gameKindRocket">Rocket</option>
+            <option value="gameKindClicker">Clicker</option>
+        </select>    
+    </div>
 
-
-    <label for="startSection">Start Section</label>
-    <input type="text" id="startSection" placeholder="26.2" autocomplete="off">
-    <label for="startSection">End Section</label>
-    <input type="text" id="endSection" placeholder="26.4" autocomplete="off">
+    <div>
+        <label for="startSection">Start Section</label>
+        <input type="text" id="startSection" placeholder="26.2" autocomplete="off">
+        <label for="startSection">End Section</label>
+        <input type="text" id="endSection" placeholder="26.4" autocomplete="off">    
+    </div>
 
     <input type="text" id="username" placeholder="Enter your name" autocomplete="off">
 
@@ -37,6 +40,10 @@
     <p id="gameId"></p>
     <textarea id="members" readonly></textarea>
     <button id="startGameButton" onclick="startGameButtonHandler()">Start Game</button>
+</div>
+
+<div id="game">
+    <button id="nextQuestion" onclick="nextQuestionHandler()">Next Question</button>
 </div>
 
 
