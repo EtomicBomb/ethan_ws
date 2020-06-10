@@ -5,8 +5,6 @@ use crate::util::{FrameKind};
 use crate::writer::write_frame;
 use std::io;
 
-// TODO: correctly handle io error Interrupted?
-
 pub struct WebSocketListener {
     reader: BufReader<TcpStream>,
 }
@@ -39,7 +37,6 @@ impl Iterator for WebSocketListener {
     }
 }
 
-
 pub enum WebSocketMessage {
     Text(String),
     Binary(Vec<u8>),
@@ -54,7 +51,7 @@ impl WebSocketMessage {
     }
 }
 
-fn read_next_message(reader: &mut impl Read) -> Result<(Vec<u8>, FrameKind), CoolError> {
+fn read_next_message(reader: &mut impl Read) -> io::Result<(Vec<u8>, FrameKind)> {
     // blocks the current thread until we receive a full message from the client
 
     let mut buf = Vec::new();
@@ -70,43 +67,53 @@ fn read_next_message(reader: &mut impl Read) -> Result<(Vec<u8>, FrameKind), Coo
     Ok((buf, frame_kind))
 }
 
-// this function is blocking (epic style)
-fn read_next_frame(reader: &mut impl Read, buf: &mut Vec<u8>) -> Result<Frame, CoolError> {
-    macro_rules! read_bytes {
-        ($len:expr) => {{
-            let mut buf = [0u8; $len];
-            match reader.read(&mut buf) {
-                Ok($len) => buf,
-                Ok(_) | Err(_) => return Err(CoolError::Unrecoverable),
-            }
-        }};
-    }
 
-    // read two bytes so we can get the payload length
-    let [first_byte, second_byte] = read_bytes!(2);
+fn read_next_frame(reader: &mut impl Read, buf: &mut Vec<u8>) -> io::Result<Frame> {
+    // read the first byte from the stream, which tells us if this was the message's last frame and
+    // what kind of frame it was
+    let mut first_byte = [0u8; 1];
+    reader.read_exact(&mut first_byte)?;
+    let [first_byte] = first_byte;
 
     let is_last_frame = (first_byte >> 7) == 1;
-    let frame_kind = FrameKind::from_number(first_byte & 0b1111).ok_or(CoolError::Unrecoverable)?;
+    let frame_kind = FrameKind::from_opcode(first_byte & 0b1111)?;
 
-    let payload_length =
-        match second_byte & 0b01111111 {
-            n @ 0..=125 => n as usize,
-            126 => u16::from_be_bytes(read_bytes!(2)) as usize,
-            127 => u64::from_be_bytes(read_bytes!(8)) as usize,
-            _ => unreachable!("bit mask doesn't allow for greater"),
-        };
+    // extract our payload
+    let payload_length = get_payload_len(reader)?;
 
-    let masking_key = read_bytes!(4);
+    let mut masking_key = [0u8; 4];
+    reader.read_exact(&mut masking_key)?;
 
     append_payload(reader, payload_length, masking_key, buf)?;
 
     Ok(Frame { is_last_frame, frame_kind })
 }
 
-fn append_payload(reader: &mut impl Read, payload_len: usize, masking_key: [u8; 4], buf: &mut Vec<u8>) -> Result<(), CoolError> {
+fn get_payload_len(reader: &mut impl Read) -> io::Result<usize> {
+    let mut heuristic_byte = [0u8; 1];
+    reader.read_exact(&mut heuristic_byte)?;
+    let [heuristic_byte] = heuristic_byte;
+
+    match heuristic_byte & 0b_0111_1111 {
+        n @ 0..=125 => Ok(n as usize),
+        126 => {
+            let mut len = [0u8; 2];
+            reader.read_exact(&mut len)?;
+            Ok(u16::from_be_bytes(len) as usize)
+        },
+        127 => {
+            let mut len = [0u8; 8];
+            reader.read_exact(&mut len)?;
+            Ok(u64::from_be_bytes(len) as usize)
+        },
+        _ => unreachable!("larger values prevented by bit mask"),
+    }
+}
+
+fn append_payload(reader: &mut impl Read, payload_len: usize, masking_key: [u8; 4], buf: &mut Vec<u8>) -> io::Result<()> {
     let old_len = buf.len();
-    buf.resize(old_len+ payload_len, 0);
-    let mut read_into = &mut buf[old_len..];
+    buf.resize(old_len+payload_len, 0);
+    let read_into = &mut buf[old_len..];
 
     reader.read_exact(read_into)?;
 
@@ -118,20 +125,8 @@ fn append_payload(reader: &mut impl Read, payload_len: usize, masking_key: [u8; 
     Ok(())
 }
 
-
 #[derive(Debug)]
 struct Frame {
     is_last_frame: bool,
     frame_kind: FrameKind,
-}
-
-#[derive(Debug)]
-pub enum CoolError {
-    Unrecoverable,
-}
-
-impl From<io::Error> for CoolError {
-    fn from(_: io::Error) -> CoolError {
-        CoolError::Unrecoverable
-    }
 }
