@@ -33,27 +33,6 @@ impl VocabularyModel {
         self.statistics_file.flush().unwrap();
     }
 
-    // pub fn get_query(&self, start: (u8, u8), end: (u8, u8)) -> Query {
-    //     Query { start, end }
-    // }
-
-    // pub fn query_is_valid(&self, query: Query) -> bool {
-    //     self.terms_in_range(query).len() > 4
-    // }
-
-    // pub fn get_multiple_choice_question(&self, query: Query) -> MultipleChoiceQuestion {
-    //     let in_range = self.terms_in_range(query);
-    //
-    //     let mut options: Vec<TermId> = in_range.choose_multiple(&mut thread_rng(), 4).copied().collect();
-    //     assert_eq!(options.len(), 4);
-    //
-    //     options.shuffle(&mut thread_rng());
-    //
-    //     let correct = thread_rng().gen_range(0, 4);
-    //
-    //     MultipleChoiceQuestion { correct, options }
-    // }
-
     fn terms_in_range(&self, start: (u8, u8), end: (u8, u8)) -> Vec<TermId> {
         self.terms.iter()
             .filter(|&(_, term)| start <= term.location() && term.location() <= end)

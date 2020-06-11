@@ -284,47 +284,6 @@ fn get_chapter_thing(string: &str) -> Result<(u8, u8), LobbyCreateError> {
     Ok((chapter, section))
 }
 
-
-// struct Game {
-//     host: PeerId,
-//     users: Vec<PeerId>,
-//     terms: Vec<TermId>,
-//     game_specific: Box<dyn GameSpecific>,
-// }
-//
-// impl Game {
-//     fn from_lobby(lobby: Lobby) -> Game {
-//         Game {
-//             host: lobby.host,
-//             users: lobby.users,
-//             terms: lobby.terms,
-//             game_specific: lobby.game_specific,
-//         }
-//     }
-//
-//     /// returns true if host left
-//     fn leave(&mut self, id: PeerId, users: &mut Users) -> bool {
-//         let host_left = id == self.host;
-//
-//         if host_left {
-//             self.send_to_all(users,jsons!({kind:"hostAbandoned"})); // what the fuck????
-//         } else if self.users.contains(&id) {
-//             self.game_specific.leave(id, users);
-//             self.users.remove(self.users.iter().position(|&u| u == id).unwrap());
-//         }
-//
-//         host_left
-//     }
-//
-//     fn receive_message(&mut self, id: PeerId, message: &HashMap<String, Json>, users: &mut Users) -> Result<(), Drop> {
-//         self.game_specific.receive_message(id, message, users)
-//     }
-//
-//     fn periodic(&mut self, users: &mut Users) {
-//         self.game_specific.periodic(users);
-//     }
-// }
-
 trait GameSpecific: Send+Debug {
     fn receive_message(&mut self, id: PeerId, message: &HashMap<String, Json>, users: &mut Users, vocabulary: &mut VocabularyModel) -> Result<(), Drop>;
     fn periodic(&mut self, users: &mut Users, vocabulary: &mut VocabularyModel);

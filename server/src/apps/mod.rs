@@ -47,7 +47,7 @@ impl CoolStuff {
             deal.lock().unwrap().new_peer(id, WebSocketWriter::new(tcp_stream.try_clone().unwrap()));
 
             let state = Arc::clone(&self.map[location]);
-            thread::Builder::new().name(format!("server{}/{}", location, id.0)).spawn(move || {
+            thread::Builder::new().name(format!("server/{}", id.0)).spawn(move || {
                 for message in WebSocketListener::new(tcp_stream) {
                     match state.lock().unwrap().on_message_receive(id, message) {
                         Ok(()) => {},
