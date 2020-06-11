@@ -36,7 +36,7 @@ impl GlobalState for HistoryGlobalState {
                 let username = json.get("username")?.get_string()?.to_string();
                 self.users.add_username(id, username.clone());
 
-                match Lobby::new(id, json.get("settings")?, &self.vocabulary_model) {
+                match Lobby::new(id, json.get("settings")?, &mut self.vocabulary_model) {
                     Ok(lobby) => {
                         let game_id = self.game_id_generator.next();
                         self.lobbies.insert(game_id, lobby);
@@ -145,18 +145,13 @@ struct Lobby {
 }
 
 impl Lobby {
-    fn new(host: PeerId, json: &Json, vocabulary: &VocabularyModel) -> Result<Lobby, LobbyCreateError> {
+    fn new(host: PeerId, json: &Json, vocabulary: &mut VocabularyModel) -> Result<Lobby, LobbyCreateError> {
         let json_map = json.get_object()?;
 
         let start = get_chapter_thing(json_map.get("startSection")?.get_string()?)?;
         let end = get_chapter_thing(json_map.get("endSection")?.get_string()?)?;
 
-
-        let query = vocabulary.get_query(start, end);
-
-        if !vocabulary.query_is_valid(query) {
-            return Err(LobbyCreateError::BlankRange);
-        }
+        let query = Query::new(start, end, vocabulary).ok_or(LobbyCreateError::BlankRange)?;
 
         let game_kind = GameKind::from_str(json_map.get("gameKind")?.get_string()?)?;
 

@@ -42,7 +42,7 @@ function displayQuestion(definition, terms) {
 
     for (let i=0; i<4; i++) {
         document.querySelector("label[for='answer"+i+"']").innerText = terms[i];
-        // document.getElementById("answer"+i).innerText = ;
+        document.getElementById("answer"+i).disabled = false;
     }
 }
 
@@ -53,6 +53,9 @@ function submitAnswerHandler(answer) {
         answer: answer,
     }))
 
+    for (let i=0; i<4; i++) {
+        document.getElementById("answer"+i).disabled = true;
+    }
 
 }
 

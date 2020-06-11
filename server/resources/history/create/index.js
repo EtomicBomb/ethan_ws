@@ -10,21 +10,44 @@ socket.onmessage = msg => {
 
         document.getElementById("createMenu").style.display = "none";
         document.getElementById("lobby").style.display = "block";
-    
 
     } else if (data.kind == "createFailed") {
         document.getElementById("errorLabel").innerText = data.message;
 
     } else if (data.kind == "refreshLobby") {
         document.getElementById("members").value = data.users.join("\n");
+
     } else if (data.kind == "initialStuff") {
         document.getElementById("lobby").style.display = "none";
         document.getElementById("game").style.display = "block";
 
+        displayQuestion(data.question);
 
-
+    } else if (data.kind == "updateStuff") {
+        displayQuestion(data.newQuestion);
+        displayScores(data.scores);
     }
 };
+
+function displayScores(scores) {
+    scores.sort((a, b) => b.score - a.score);
+
+    let scoresText = "";
+    document.getElementById("scores").innerText
+    for (let player of scores) {
+        scoresText += player.username + ": " + player.score + "\n";    
+    }
+    document.getElementById("scores").value = scoresText;
+
+}
+
+function displayQuestion(question) {
+    document.getElementById("definition").innerText = question.definition;
+
+    for (let i=0; i<4; i++) {
+        document.getElementById("answer"+i).innerText = question.terms[i];
+    }
+}
 
 function nextQuestionHandler() {
     socket.send(JSON.stringify({

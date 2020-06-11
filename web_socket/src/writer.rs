@@ -33,7 +33,7 @@ pub fn write_frame(writer: &mut impl Write, payload: &[u8], frame_kind: FrameKin
     writer.flush()
 }
 
-pub fn write_len_header(len: usize, writer: &mut impl Write) -> io::Result<()> {
+fn write_len_header(len: usize, writer: &mut impl Write) -> io::Result<()> {
     match len {
         0..=125 => writer.write_all(&[len as u8]),
         126..=65535 => {

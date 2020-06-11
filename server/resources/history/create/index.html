@@ -38,12 +38,20 @@
 <div id="lobby">
     <h1 id="hostName"></h1>
     <p id="gameId"></p>
-    <textarea id="members" readonly></textarea>
+    <textarea id="members" readonly autocomplete="off"></textarea>
     <button id="startGameButton" onclick="startGameButtonHandler()">Start Game</button>
 </div>
 
 <div id="game">
+    <p id="definition"></p>
+    <p id="answer0"></p>
+    <p id="answer1"></p>
+    <p id="answer2"></p>
+    <p id="answer3"></p>
+
+    <textarea id="scores" readonly autocomplete="off"></textarea> 
     <button id="nextQuestion" onclick="nextQuestionHandler()">Next Question</button>
+    
 </div>
 
 
