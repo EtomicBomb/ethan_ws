@@ -3,7 +3,7 @@ use crate::apps::PeerId;
 use json::{Json, jsons, jsont};
 use std::collections::HashMap;
 use crate::apps::Drop;
-use crate::apps::history::vocabulary_model::{TermId, VocabularyModel, Query, MultipleChoiceQuestion};
+use crate::apps::history::vocabulary_model::{VocabularyModel, Query, MultipleChoiceQuestion};
 
 #[derive(Debug)]
 pub struct QuizGame {
@@ -17,7 +17,7 @@ pub struct QuizGame {
 
 impl QuizGame {
     pub fn new(host: PeerId, players: Vec<PeerId>, mut query: Query, vocabulary: &mut VocabularyModel, users: &mut Users) -> QuizGame {
-        let current_question = query.get_multiple_choice_question(vocabulary);
+        let current_question = query.get_multiple_choice(vocabulary);
         let question_json = current_question.jsonify(vocabulary);
 
         for &peer in players.iter().chain(Some(&host)) {
@@ -36,7 +36,8 @@ impl QuizGame {
                 let username = users.get_username(*id).to_string();
                 let score = *self.scores.get(id).unwrap_or(&0.0);
                 jsont!({username: username, score: score})
-            }).collect())
+            })
+            .collect())
     }
 }
 
@@ -51,22 +52,20 @@ impl GameSpecific for QuizGame {
                     }
                 }
 
-                let new_question = self.query.get_multiple_choice_question(vocabulary);
+                let new_question = self.query.get_multiple_choice(vocabulary);
                 let new_question_json = new_question.jsonify(vocabulary);
 
-                for &peer in self.players.iter() {
+                for &player in self.players.iter() {
                     // generate our response
-                    let was_correct = self.submitted_answers.get(&peer)
+                    let was_correct = self.submitted_answers.get(&player)
                         .map(|&response| self.current_question.is_correct(response))
                         .unwrap_or(false);
 
-                    let score = *self.scores.get(&peer).unwrap_or(&0.0);
-
-                    users.get_writer(peer).write_string(&jsons!({
+                    users.get_writer(player).write_string(&jsons!({
                         kind: "updateStuff",
                         newQuestion: (new_question_json.clone()),
                         wasCorrect: was_correct,
-                        score: score,
+                        score: (self.scores.get(&player).copied().unwrap_or(0.0)),
                     }))?;
                 }
 
@@ -92,11 +91,24 @@ impl GameSpecific for QuizGame {
         Ok(())
     }
 
-    fn periodic(&mut self, users: &mut Users, vocabulary: &mut VocabularyModel) {
+    fn periodic(&mut self, _users: &mut Users, _vocabulary: &mut VocabularyModel) {}
 
-    }
+    fn leave(&mut self, id: PeerId, users: &mut Users, _vocabulary: &mut VocabularyModel) -> bool {
+        let was_host = id == self.host;
 
-    fn leave(&mut self, id: PeerId, users: &mut Users, vocabulary: &mut VocabularyModel) -> bool {
-        todo!()
+        if was_host {
+            let message = jsons!({kind:"hostAbandoned"});
+            for &player in self.players.iter() {
+                let _ = users.get_writer(player).write_string(&message);
+            }
+
+        } else {
+            self.players.remove_item(&id);
+            self.scores.remove(&id);
+            self.submitted_answers.remove(&id);
+
+        }
+
+        was_host
     }
 }

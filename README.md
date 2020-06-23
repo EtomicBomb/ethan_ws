@@ -12,9 +12,9 @@ because it's not very economic.
 
 # What is going to happen with this in the future?
 
-Mostly I don't know. I think I want to improve the API so this can be used for a
+Mostly I don't know. I think I want to improve the library so this can be used for a
 wider variety of projects. There's a few limitations that I want to address, like 
-the lack of a non-hacky way to implement HTTP response codes. And the no `ttps thing.
+the lack of a non-hacky way to implement HTTP response codes. And the no https thing.
 
 # License
 

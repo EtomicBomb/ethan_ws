@@ -50,7 +50,7 @@ impl GlobalState for FillerGlobalState {
 }
 
 
-pub fn handle_request(game_state: &mut GameState, message: WebSocketMessage) -> Option<Json> {
+fn handle_request(game_state: &mut GameState, message: WebSocketMessage) -> Option<Json> {
     let color_chosen = Color::from_string(message.get_text()?)?;
 
     game_state.do_move(color_chosen).ok()?;

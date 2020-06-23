@@ -8,10 +8,12 @@ use std::option::NoneError;
 use std::fmt;
 use std::fmt::Debug;
 use crate::apps::history::quiz_game::QuizGame;
-use crate::apps::history::vocabulary_model::{TermId, VocabularyModel, Query};
+
+use vocabulary_model::{VocabularyModel, Query};
 
 mod quiz_game;
 mod vocabulary_model;
+mod terms;
 
 pub struct HistoryGlobalState {
     users: Users,
@@ -130,7 +132,7 @@ impl HistoryGlobalState {
             lobbies: HashMap::new(),
             active_games: HashMap::new(),
             game_id_generator: GameIdGenerator::new(),
-            vocabulary_model: VocabularyModel::new().unwrap()
+            vocabulary_model: VocabularyModel::new()
         }
     }
 }

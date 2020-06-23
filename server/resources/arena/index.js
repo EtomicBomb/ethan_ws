@@ -54,11 +54,15 @@ socket.onopen = () => {
 };
 
 
+const EYE_HEIGHT = 1;
+const CYLINDER_HEIGHT = 1.5;
+
 var RECT_WIDTH = 5;
 
 var TAU = 2*Math.PI;
 //var FOV = TAU/2;
-var FOV = TAU/10;
+const H_FOV = TAU/5;
+const V_FOV = TAU/5;
 var ROTATE_ANGLE = TAU/20;
 var PLAYER_RADIUS = 0.1;
 
@@ -69,18 +73,21 @@ var blang = {r:0,g:255,b:255};
 var boam = {r:255,g:0,b:255};
 
 var samInducedBruh = [
-    new HorizontalLine(0, -5, Infinity, boam),
-    new HorizontalLine(0, 0, 9, blue),
-    new HorizontalLine(9, 0, 9, {r:255, g:200, b:0}),
-    new VerticalLine(0, 0, 9, {r:255, g:0, b:0}),
-    new VerticalLine(9, 0, 9, blue),
-    new Circle(5, 5, 0.5, green),
-    new Circle(7, 5, 0.5, boauns),
-    new Circle(3, 1, 0.75, blang),
-    new Circle(1, 6, 0.75, boam),
-    new InsideCircle(5, 5, 0.5, blue),
-    new InsideCircle(-30, 0, 10, green),
-    new Circle(-30, 0, 10, green),
+    new HorizontalLine(0, -5, Infinity, boam, CYLINDER_HEIGHT),
+    new HorizontalLine(0, 0, 9, blue, CYLINDER_HEIGHT),
+    new HorizontalLine(9, 0, 9, {r:255, g:200, b:0}, CYLINDER_HEIGHT),
+    new VerticalLine(0, 0, 9, {r:255, g:0, b:0}, CYLINDER_HEIGHT),
+    new VerticalLine(9, 0, 9, blue, CYLINDER_HEIGHT),
+    new Circle(5, 5, 0.5, green, CYLINDER_HEIGHT),
+    new Circle(7, 5, 0.5, boauns, CYLINDER_HEIGHT),
+    new Circle(3, 1, 0.75, blang, CYLINDER_HEIGHT),
+    new Circle(20, 6, 0.75, boam, 0.25),
+    new InsideCircle(20, 10, 0.5, blue, CYLINDER_HEIGHT),
+
+
+    new InsideCircle(5, 5, 0.5, blue, CYLINDER_HEIGHT),
+    new InsideCircle(-30, 0, 10, green, CYLINDER_HEIGHT),
+    new Circle(-30, 0, 10, green, CYLINDER_HEIGHT),
 ];
 
 
@@ -89,9 +96,7 @@ var playerX = 3;
 var playerY = 3;
 
 document.addEventListener("keydown", event => {
-   if (event.key == "Enter") {
-        canvas.requestPointerLock();
-   }
+   if (event.key == "Enter") canvas.requestPointerLock();
 
     keysDown[event.key] = true;
 });
@@ -153,52 +158,90 @@ function drawFrame(elapsed) {
         theta += step*ROTATE_ANGLE;
     }
 
-
+    // clear canvas
     context.fillStyle = "white";
     context.strokeStyle = "white";
     context.fillRect(0, 0, width, height);
 
     drawGrid();
+    drawObjects();
 
-    var cos, sin, distance, d, f, wallStuff, i;
+    window.requestAnimationFrame(drawFrame);
+}
 
-    var length = width/(2*Math.tan(FOV));
+function drawObjects() {
+    var cos, sin, distance, d, f;
 
-//    for (var screenX=0, checkAngle=theta-FOV; screenX<width; screenX += RECT_WIDTH, checkAngle += RECT_WIDTH*FOV/(width/2)) {
     for (var screenX=0; screenX < width; screenX += RECT_WIDTH) {
-        var checkAngle = map(screenX, 0, width, theta-FOV, theta+FOV);
-//        var checkAngle = theta + Math.atan2((screenX - width/2),length);
-
+        var checkAngle = map(screenX, 0, width, theta-H_FOV/2, theta+H_FOV/2);
         cos = Math.cos(checkAngle);
         sin = Math.sin(checkAngle);
-        distance = Infinity;
 
+        distance = Infinity;
         var color = {r:255,g:255,b:255};
+        var h = 0;
 
         for (var bruh of samInducedBruh.concat(players)) {
             d = bruh.intersect(playerX, playerY, cos, sin);
             if (d>0 && d<distance) {
                 distance = d;
                 color = bruh.color;
+                h = bruh.height;
             }
         }
 
-//        wallStuff = height* length*0.3/(length+distance);
-        wallStuff = height/2 - height/distance;
+        var angleToTop = Math.atan2(h-EYE_HEIGHT, distance);
+        var topScreenY = map(angleToTop, -V_FOV/2, V_FOV/2, height, 0);
+        
+        var angleToBottom = Math.atan2(-EYE_HEIGHT, distance);
+        var bottomScreenY = map(angleToBottom, -V_FOV/2, V_FOV/2, height, 0);
 
         f = map(distance, 0, 20, 1, 0);
         var colorString = rgb(color.r*f, color.g*f, color.b*f);
 
-
         context.fillStyle = colorString;
         context.strokeStyle = colorString;
-        context.fillRect(screenX, wallStuff, RECT_WIDTH, height-2*wallStuff);
+        context.fillRect(screenX, topScreenY, RECT_WIDTH, bottomScreenY-topScreenY);
     }
-
-    window.requestAnimationFrame(drawFrame);
 }
 
-function InsideCircle(h, k, r, color) {
+function drawGrid() {
+    context.fillStyle = "grey";
+    context.strokeStyle = "grey";
+
+    var playerXRounded = Math.floor(playerX);
+    var playerYRounded = Math.floor(playerY);
+
+
+    for (var screenX=0; screenX < width; screenX += RECT_WIDTH) {
+        var checkAngle = map(screenX, 0, width, theta-H_FOV/2, theta+H_FOV/2);
+
+        for (var lineX=playerXRounded-30; lineX < playerXRounded+30; lineX++) {
+            var distance = (lineX - playerX) / Math.cos(checkAngle);
+
+            if (distance > 0) {
+                var angleToBottom = Math.atan2(-EYE_HEIGHT, distance);
+                var bottomScreenY = map(angleToBottom, -V_FOV/2, V_FOV/2, height, 0);
+        
+                context.fillRect(screenX, bottomScreenY, RECT_WIDTH, RECT_WIDTH);
+            }
+        }
+
+        for (var lineY=playerYRounded-30; lineY < playerYRounded+30; lineY++) {
+            var distance = (playerY - lineY) / Math.sin(checkAngle);
+
+            if (distance > 0) {
+                var angleToBottom = Math.atan2(-EYE_HEIGHT, distance);
+                var bottomScreenY = map(angleToBottom, -V_FOV/2, V_FOV/2, height, 0);
+        
+                context.fillRect(screenX, bottomScreenY, RECT_WIDTH, RECT_WIDTH);
+            }
+        }
+    }
+}
+
+
+function InsideCircle(h, k, r, color, height) {
     this.intersect = function(x0, y0, cos, sin) {
         var b = k*sin - h*cos + x0*cos - y0*sin;
         var descriminant = b*b - x0*x0 - y0*y0 + 2*h*x0 + 2*k*y0 - k*k - h*h + r*r;
@@ -206,9 +249,10 @@ function InsideCircle(h, k, r, color) {
     };
 
     this.color = color;
+    this.height = height;
 }
 
-function Circle(h, k, r, color) {
+function Circle(h, k, r, color, height) {
     this.intersect = function(x0, y0, cos, sin) {
         var b = k*sin - h*cos + x0*cos - y0*sin;
         var descriminant = b*b - x0*x0 - y0*y0 + 2*h*x0 + 2*k*y0 - k*k - h*h + r*r;
@@ -216,9 +260,10 @@ function Circle(h, k, r, color) {
     };
 
     this.color = color;
+    this.height = height;
 }
 
-function HorizontalLine(lineY, xStart, xEnd, color) {
+function HorizontalLine(lineY, xStart, xEnd, color, height) {
     this.intersect = function(x0, y0, cos, sin) {
         var dist = (y0-lineY)/sin;
         var x = x0 + dist*cos;
@@ -226,9 +271,10 @@ function HorizontalLine(lineY, xStart, xEnd, color) {
     };
 
     this.color = color;
+    this.height = height;
 }
 
-function VerticalLine(lineX, yStart, yEnd, color) {
+function VerticalLine(lineX, yStart, yEnd, color, height) {
     this.intersect = function(x0, y0, cos, sin) {
         var dist = (lineX - x0)/cos;
         var y = y0 - dist*sin;
@@ -236,6 +282,7 @@ function VerticalLine(lineX, yStart, yEnd, color) {
     };
 
     this.color = color;
+    this.height = height;
 }
 
 function rgb(r, g, b) {
@@ -246,39 +293,6 @@ function map(x, inMin, inMax, outMin, outMax) { // the spicy sauce
     return (x - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
 }
 
-function drawGrid() {
-    // i guess we know playerX, playerY, and theta
-
-    context.fillStyle = "grey";
-    context.strokeStyle = "grey";
-
-    var playerXRounded = Math.floor(playerX);
-    var playerYRounded = Math.floor(playerY);
-
-
-//    for (var screenX=0, checkAngle=theta-FOV; screenX<width; screenX += RECT_WIDTH, checkAngle += RECT_WIDTH*FOV/(width/2)) {
-    for (var screenX=0; screenX < width; screenX += RECT_WIDTH) {
-        var checkAngle = map(screenX, 0, width, theta-FOV, theta+FOV);
-
-        for (var lineX=playerXRounded-30; lineX < playerXRounded+30; lineX++) {
-            var distance = (lineX - playerX) / Math.cos(checkAngle);
-
-            if (distance > 0) {
-                var wallStuff = height/2 + height/distance;
-                context.fillRect(screenX, wallStuff, RECT_WIDTH, RECT_WIDTH);
-            }
-        }
-
-        for (var lineY=playerYRounded-30; lineY < playerYRounded+30; lineY++) {
-            var distance = (playerY - lineY) / Math.sin(checkAngle);
-
-            if (distance > 0) {
-                var wallStuff = height/2 + height/distance;
-                context.fillRect(screenX, wallStuff, RECT_WIDTH, RECT_WIDTH);
-            }
-        }
-    }
-}
 
 function line(startX, startY, endX, endY) {
     context.beginPath();
