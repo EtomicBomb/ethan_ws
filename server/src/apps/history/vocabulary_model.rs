@@ -38,11 +38,13 @@ impl VocabularyModel {
     }
 }
 
+#[allow(unused)]
 pub struct FillInTheBlank {
     prompt: TermId,
 }
 
 impl FillInTheBlank {
+    #[allow(unused)]
     pub fn is_correct(&self, answer: &str, vocab: &VocabularyModel) -> bool {
         fn clean(s: &str) -> Vec<u8> {
             s.bytes()
@@ -128,6 +130,7 @@ impl Query {
         *self.in_range.choose_weighted(&mut thread_rng(), prompt_fitness).unwrap()
     }
 
+    #[allow(unused)] // todo: remove these
     pub fn get_fill_in_the_blank(&mut self, vocab: &VocabularyModel) -> FillInTheBlank {
         FillInTheBlank { prompt: self.select_prompt(vocab) }
     }

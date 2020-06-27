@@ -12,6 +12,9 @@ sha1 = "0.6.0"
 lazy_static = "1.4.0"
 chrono = "0.4.11"
 rand = "0.7.3"
+serde = { version = "1.0.92", features = ["derive"] }
+bincode = "1.1.4"
+vec_map = "0.8.2"
 
 json = { path = "../json" }
 lisp = { path = "../lisp" }

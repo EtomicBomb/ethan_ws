@@ -16,6 +16,11 @@ Mostly I don't know. I think I want to improve the library so this can be used f
 wider variety of projects. There's a few limitations that I want to address, like 
 the lack of a non-hacky way to implement HTTP response codes. And the no https thing.
 
+# Credits
+
+* Word list for generating Pusoy Game ids was taken from https://www.eff.org/dice.
+* @Sinjin2300 helped me with the code for the [tanks game](server/resources/tanks)
+
 # License
 
 This project is dual licensed under either [Version 2 of the 

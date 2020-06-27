@@ -10,6 +10,7 @@ mod tanks;
 mod history;
 mod arena;
 mod secure;
+mod pusoy;
 
 use std::sync::{Arc, Mutex};
 use std::{thread};
@@ -19,6 +20,7 @@ use crate::apps::tanks::TanksGlobalState;
 use crate::apps::history::HistoryGlobalState;
 use crate::apps::arena::ArenaGlobalState;
 use crate::apps::secure::SecureGlobalState;
+use crate::apps::pusoy::PusoyGlobalState;
 
 use std::option::NoneError;
 use http::HttpRequest;
@@ -41,50 +43,39 @@ impl CoolStuff {
         map.insert("/history".into(), Arc::new(Mutex::new(HistoryGlobalState::new())));
         map.insert("/arena".into(), Arc::new(Mutex::new(ArenaGlobalState::new())));
         map.insert("/secure".into(), Arc::new(Mutex::new(SecureGlobalState::new())));
+        map.insert("/pusoy".into(), Arc::new(Mutex::new(PusoyGlobalState::new())));
 
         Some(CoolStuff { map, peer_id_generator: PeerIdGenerator::new() })
     }
 
     pub fn handle_new_connection(self: &Arc<CoolStuff>, mut tcp_stream: TcpStream) {
-        // let's get our http request
-
-        fn get_request(tcp_stream: &mut TcpStream) -> Option<HttpRequest> {
-            let mut buf = [0u8; MAX_HTTP_REQUEST_SIZE];
-
-            let len = tcp_stream.read(&mut buf).ok()?;
-
-            let request = String::from_utf8_lossy(&buf[0..len]).parse().ok()?;
-
-            Some(request)
-        }
-
-        if let Some(request) = get_request(&mut tcp_stream) {
-            self.handle_request(request, tcp_stream);
-        }
-    }
-
-    fn handle_request(self: &Arc<CoolStuff>, request: HttpRequest, mut tcp_stream: TcpStream) {
         let id = self.peer_id_generator.next();
         let self_clone = Arc::clone(self);
 
         thread::Builder::new().name(format!("server/{}", id.get_label())).spawn(move || {
 
-            // check if we have a regular old http get or a websocket request
-            if let Some(sec_key) = request.get_header_value("Sec-WebSocket-Key") {
-                let to_hash = format!("{}{}", sec_key, WEBSOCKET_SECURE_KEY_MAGIC_NUMBER);
-                let digest = to_base64(&Sha1::from(to_hash.as_bytes()).digest().bytes());
-                let response = format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n", digest);
-
-                if tcp_stream.write_all(response.as_bytes()).is_ok() {
-                    self_clone.on_new_web_socket_connection(request.resource_location(), tcp_stream, id);
-                }
-
-            } else {
-                // just a regular old http request!
-                let _ = send_resource(&request, &mut tcp_stream);
+            if let Some(request) = get_request(&mut tcp_stream) {
+                self_clone.handle_request(request, tcp_stream, id);
             }
 
         }).unwrap();
+    }
+
+    fn handle_request(&self, request: HttpRequest, mut tcp_stream: TcpStream, id: PeerId) {
+        // check if we have a regular old http get or a websocket request
+        if let Some(sec_key) = request.get_header_value("Sec-WebSocket-Key") {
+            let to_hash = format!("{}{}", sec_key, WEBSOCKET_SECURE_KEY_MAGIC_NUMBER);
+            let digest = to_base64(&Sha1::from(to_hash.as_bytes()).digest().bytes());
+            let response = format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n", digest);
+
+            if tcp_stream.write_all(response.as_bytes()).is_ok() {
+                self.on_new_web_socket_connection(request.resource_location(), tcp_stream, id);
+            }
+
+        } else {
+            // just a regular old http request!
+            let _ = send_resource(&request, &mut tcp_stream);
+        }
     }
 
     fn on_new_web_socket_connection(&self, location: &str, tcp_stream: TcpStream, id: PeerId) {
@@ -147,4 +138,14 @@ impl PeerIdGenerator {
     fn next(&self) -> PeerId {
         PeerId(self.0.fetch_add(1, atomic::Ordering::Relaxed))
     }
+}
+
+fn get_request(tcp_stream: &mut TcpStream) -> Option<HttpRequest> {
+    let mut buf = [0u8; MAX_HTTP_REQUEST_SIZE];
+
+    let len = tcp_stream.read(&mut buf).ok()?;
+
+    let request = String::from_utf8_lossy(&buf[0..len]).parse().ok()?;
+
+    Some(request)
 }
