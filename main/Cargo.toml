@@ -1,0 +1,17 @@
+[package]
+name = "main"
+version = "0.1.0"
+authors = ["EtomicBomb <ethan@ethan.ws>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+server = { path = "../server" }
+json = { path = "../json" }
+web_socket = { path = "../web_socket" }
+rand = "0.7.3"
+vec_map = "0.8.2"
+lazy_static = "1.4.0"
+serde = { version = "1.0.92", features = ["derive"] }
+bincode = "1.1.4"
