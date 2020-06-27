@@ -3,7 +3,7 @@ use std::time::{UNIX_EPOCH, SystemTime};
 use rand::{thread_rng, Rng, random};
 
 use crate::{GOD_SET_PATH};
-use crate::apps::{GlobalState, PeerId, Drop};
+use server::{GlobalState, PeerId, Drop};
 use json::Json;
 use std::str::FromStr;
 use rand::seq::SliceRandom;

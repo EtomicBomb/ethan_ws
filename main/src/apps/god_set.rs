@@ -1,4 +1,4 @@
-use crate::apps::{GlobalState, PeerId, Drop};
+use server::{GlobalState, PeerId, Drop};
 use std::io::{BufReader, BufRead};
 use std::fs::File;
 use crate::GOD_SET_PATH;

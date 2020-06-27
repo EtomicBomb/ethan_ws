@@ -1,6 +1,6 @@
 use rand::{Rng, thread_rng};
 use std::collections::HashSet;
-use crate::apps::{GlobalState, PeerId, Drop};
+use server::{GlobalState, PeerId, Drop};
 use web_socket::{WebSocketWriter, WebSocketMessage};
 use std::fmt::Debug;
 use std::collections::HashMap;
@@ -25,7 +25,7 @@ mod pusoy_game;
 
 lazy_static! { 
     static ref WORD_LIST: Vec<String> = {
-        let mut reader = BufReader::new(File::open(WORD_LIST_PATH).unwrap());
+        let reader = BufReader::new(File::open(WORD_LIST_PATH).unwrap());
 
         let words: Vec<String> = reader.lines()
             .map(|line| line.unwrap().trim().to_string())
@@ -60,7 +60,7 @@ impl PusoyGlobalState {
         }
     }
 
-    pub fn lobby_from_id(&mut self, json: &Json) -> Option<GameId> {
+    fn lobby_from_id(&mut self, json: &Json) -> Option<GameId> {
         let game_id = GameId::from_json(json)?;
 
         if self.lobbies.contains_key(&game_id) {
@@ -239,7 +239,7 @@ impl Lobby {
 }
 
 #[derive(Debug)]
-struct Member {
+pub struct Member {
     id: PeerId,
     writer: WebSocketWriter,
     username: String,

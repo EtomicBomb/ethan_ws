@@ -1,60 +1,76 @@
 use std::collections::HashMap;
-use std::net::TcpStream;
+use std::net::{TcpStream, TcpListener};
 use web_socket::{WebSocketMessage, WebSocketListener, WebSocketWriter};
 use std::io::{self, Write, Read};
 use std::sync::atomic::{self, AtomicU64};
 
-mod filler;
-mod god_set;
-mod tanks;
-mod history;
-mod arena;
-mod secure;
-mod pusoy;
-
 use std::sync::{Arc, Mutex};
 use std::{thread};
-use crate::apps::filler::{FillerGlobalState};
-use crate::apps::god_set::GodSetGlobalState;
-use crate::apps::tanks::TanksGlobalState;
-use crate::apps::history::HistoryGlobalState;
-use crate::apps::arena::ArenaGlobalState;
-use crate::apps::secure::SecureGlobalState;
-use crate::apps::pusoy::PusoyGlobalState;
 
 use std::option::NoneError;
 use http::HttpRequest;
-use crate::{WEBSOCKET_SECURE_KEY_MAGIC_NUMBER, MAX_HTTP_REQUEST_SIZE};
 use crate::util::to_base64;
 use sha1::Sha1;
 use crate::http_handler::send_resource;
+use std::path::{PathBuf};
+use std::time::Duration;
+use std::hash::Hash;
 
-pub struct CoolStuff {
+pub struct Server {
     map: HashMap<String, Arc<Mutex<dyn GlobalState>>>,
     peer_id_generator: PeerIdGenerator,
+
+    resources_root: PathBuf,
+    max_http_request_size: usize,
+    period_length: Duration,
 }
 
-impl CoolStuff {
-    pub fn new() -> Option<CoolStuff> {
-        let mut map: HashMap<String, Arc<Mutex<dyn GlobalState>>> = HashMap::new();
-        map.insert("/filler".into(), Arc::new(Mutex::new(FillerGlobalState::new())));
-        map.insert("/godset".into(), Arc::new(Mutex::new(GodSetGlobalState::new())));
-        map.insert("/tanks".into(), Arc::new(Mutex::new(TanksGlobalState::new())));
-        map.insert("/history".into(), Arc::new(Mutex::new(HistoryGlobalState::new())));
-        map.insert("/arena".into(), Arc::new(Mutex::new(ArenaGlobalState::new())));
-        map.insert("/secure".into(), Arc::new(Mutex::new(SecureGlobalState::new())));
-        map.insert("/pusoy".into(), Arc::new(Mutex::new(PusoyGlobalState::new())));
-
-        Some(CoolStuff { map, peer_id_generator: PeerIdGenerator::new() })
+impl Server {
+    pub fn new(resources_root: PathBuf, max_http_request_size: usize, period_length: Duration) -> Server {
+        Server {
+            map: HashMap::new(),
+            peer_id_generator: PeerIdGenerator::new(),
+            resources_root,
+            max_http_request_size,
+            period_length
+        }
     }
 
-    pub fn handle_new_connection(self: &Arc<CoolStuff>, mut tcp_stream: TcpStream) {
+    pub fn start(self) {
+        let period_length = self.period_length;
+
+        let arc = Arc::new(self);
+
+        let arc_clone = Arc::clone(&arc);
+        thread::Builder::new().name("server_listener".into()).spawn(move || {
+
+            for tcp_stream in TcpListener::bind("0.0.0.0:8080").unwrap().incoming() {
+                if let Ok(tcp_stream) = tcp_stream {
+                    arc_clone.handle_new_connection(tcp_stream);
+                }
+            }
+
+        }).unwrap();
+
+        // our periodic loop
+        loop {
+            arc.periodic();
+
+            thread::sleep(period_length);
+        }
+    }
+
+    pub fn web_socket_add(&mut self, location: String, global_state: Arc<Mutex<dyn GlobalState>>) {
+        self.map.insert(location, global_state);
+    }
+
+    pub fn handle_new_connection(self: &Arc<Server>, mut tcp_stream: TcpStream) {
         let id = self.peer_id_generator.next();
         let self_clone = Arc::clone(self);
 
-        thread::Builder::new().name(format!("server/{}", id.get_label())).spawn(move || {
+        thread::Builder::new().name(format!("server/{}", id.stringify())).spawn(move || {
 
-            if let Some(request) = get_request(&mut tcp_stream) {
+            if let Some(request) = get_request(&mut tcp_stream, self_clone.max_http_request_size) {
                 self_clone.handle_request(request, tcp_stream, id);
             }
 
@@ -64,8 +80,10 @@ impl CoolStuff {
     fn handle_request(&self, request: HttpRequest, mut tcp_stream: TcpStream, id: PeerId) {
         // check if we have a regular old http get or a websocket request
         if let Some(sec_key) = request.get_header_value("Sec-WebSocket-Key") {
-            let to_hash = format!("{}{}", sec_key, WEBSOCKET_SECURE_KEY_MAGIC_NUMBER);
-            let digest = to_base64(&Sha1::from(to_hash.as_bytes()).digest().bytes());
+            let mut hasher = Sha1::new();
+            hasher.update(sec_key.as_bytes());
+            hasher.update(b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"); // magic number
+            let digest = to_base64(&hasher.digest().bytes());
             let response = format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n", digest);
 
             if tcp_stream.write_all(response.as_bytes()).is_ok() {
@@ -74,7 +92,7 @@ impl CoolStuff {
 
         } else {
             // just a regular old http request!
-            let _ = send_resource(&request, &mut tcp_stream);
+            let _ = send_resource(&request, &mut tcp_stream, &self.resources_root);
         }
     }
 
@@ -100,7 +118,7 @@ impl CoolStuff {
     }
 }
 
-trait GlobalState: Send {
+pub trait GlobalState: Send {
     fn new_peer(&mut self, id: PeerId, tcp_stream: WebSocketWriter);
     fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> Result<(), Drop>;
     fn on_drop(&mut self, id: PeerId);
@@ -122,7 +140,7 @@ impl From<NoneError> for Drop {
 pub struct PeerId(u64);
 
 impl PeerId {
-    fn get_label(&self) -> String {
+    fn stringify(&self) -> String {
         self.0.to_string()
     }
 }
@@ -140,8 +158,8 @@ impl PeerIdGenerator {
     }
 }
 
-fn get_request(tcp_stream: &mut TcpStream) -> Option<HttpRequest> {
-    let mut buf = [0u8; MAX_HTTP_REQUEST_SIZE];
+fn get_request(tcp_stream: &mut TcpStream, request_size: usize) -> Option<HttpRequest> {
+    let mut buf = vec![0u8; request_size];
 
     let len = tcp_stream.read(&mut buf).ok()?;
 

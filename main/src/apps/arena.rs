@@ -1,4 +1,4 @@
-use crate::apps::{PeerId, Drop, GlobalState};
+use server::{PeerId, Drop, GlobalState};
 use std::collections::HashMap;
 use web_socket::{WebSocketMessage, WebSocketWriter};
 use json::{jsont, Json};

@@ -25,5 +25,4 @@ the lack of a non-hacky way to implement HTTP response codes. And the no https t
 
 This project is dual licensed under either [Version 2 of the 
 Apache License](https://opensource.org/licenses/Apache-2.0), or the 
-[MIT License](https://opensource.org/licenses/MIT), at your option. Just do whatever
-you want with my code I don't care. 
+[MIT License](https://opensource.org/licenses/MIT), at your option.

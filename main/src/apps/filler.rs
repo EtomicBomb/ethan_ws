@@ -6,7 +6,7 @@ use std::collections::{HashSet, HashMap};
 use web_socket::{WebSocketMessage, WebSocketWriter};
 use json::Json;
 
-use crate::apps::{PeerId, GlobalState, Drop};
+use server::{PeerId, GlobalState, Drop};
 
 
 const WIDTH: usize = 8;
