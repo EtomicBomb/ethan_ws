@@ -1,0 +1,11 @@
+#lobby {
+    display: none;
+}
+
+#game {
+    display: none;
+}
+
+#errorLabel {
+    color: red;
+}
