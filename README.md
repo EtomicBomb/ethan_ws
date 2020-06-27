@@ -19,7 +19,7 @@ the lack of a non-hacky way to implement HTTP response codes. And the no https t
 # Credits
 
 * Word list for generating Pusoy Game ids was taken from https://www.eff.org/dice.
-* @Sinjin2300 helped me with the code for the [tanks game](resources/tanks)
+* @Sinjin2300 helped me with the code for the [arena thing](resources/arena)
 
 # License
 

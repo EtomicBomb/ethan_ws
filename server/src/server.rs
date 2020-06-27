@@ -89,7 +89,9 @@ impl Server {
             let response = format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n", digest);
 
             if tcp_stream.write_all(response.as_bytes()).is_ok() {
-                self.on_new_web_socket_connection(request.resource_location(), tcp_stream, id);
+                if let Some(state) = self.map.get(request.resource_location()) {
+                    Server::on_new_web_socket_connection(tcp_stream, id, state);
+                }
             }
 
         } else {
@@ -98,19 +100,17 @@ impl Server {
         }
     }
 
-    fn on_new_web_socket_connection(&self, location: &str, tcp_stream: TcpStream, id: PeerId) {
-        if let Some(state) = self.map.get(location) {
-            state.lock().unwrap().new_peer(id, WebSocketWriter::new(tcp_stream.try_clone().unwrap()));
+    fn on_new_web_socket_connection(tcp_stream: TcpStream, id: PeerId, state: &Arc<Mutex<dyn GlobalState>>) {
+        state.lock().unwrap().new_peer(id, WebSocketWriter::new(tcp_stream.try_clone().unwrap()));
 
-            for message in WebSocketListener::new(tcp_stream) {
-                match state.lock().unwrap().on_message_receive(id, message) {
-                    Ok(()) => {},
-                    Err(Disconnect) => break,
-                }
+        for message in WebSocketListener::new(tcp_stream) {
+            match state.lock().unwrap().on_message_receive(id, message) {
+                Ok(()) => {},
+                Err(Disconnect) => break,
             }
-
-            state.lock().unwrap().on_disconnect(id);
         }
+
+        state.lock().unwrap().on_disconnect(id);
     }
 
     pub fn periodic(&self) {

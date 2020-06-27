@@ -69,3 +69,7 @@ impl Jsonable for i32 {
 impl Jsonable for u8 {
     fn into_json(self) -> Json { Json::Number(self as f64) }
 }
+
+impl Jsonable for usize {
+    fn into_json(self) -> Json { Json::Number(self as f64) }
+}

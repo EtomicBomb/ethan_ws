@@ -4,7 +4,7 @@ use rand::distributions::{Distribution, Standard};
 use std::collections::{HashSet, HashMap};
 
 use web_socket::{WebSocketMessage, WebSocketWriter};
-use json::Json;
+use json::{Json, jsont, jsons};
 
 use server::{PeerId, GlobalState, Disconnect};
 
@@ -15,8 +15,19 @@ const N_COLORS: u8 = 6;
 const DEPTH: usize = 4;
 
 
+struct Player {
+    writer: WebSocketWriter,
+    game_state: GameState,
+}
+
+impl Player {
+    fn new(writer: WebSocketWriter) -> Player {
+        Player { writer, game_state: GameState::new() }
+    }
+}
+
 pub struct FillerGlobalState {
-    active_players: HashMap<PeerId, (GameState, WebSocketWriter)>,
+    active_players: HashMap<PeerId, Player>,
 }
 
 
@@ -27,19 +38,35 @@ impl FillerGlobalState {
 }
 
 impl GlobalState for FillerGlobalState {
-    fn new_peer(&mut self, id: PeerId, tcp_stream: WebSocketWriter) {
-        self.active_players.insert(id, (GameState::new(), tcp_stream));
+    fn new_peer(&mut self, id: PeerId, writer: WebSocketWriter) {
+        self.active_players.insert(id, Player::new(writer));
         let player = self.active_players.get_mut(&id).unwrap();
-        let _ = player.1.write_string(&player.0.jsonify().to_string());
+        let _ = player.writer.write_string(&player.game_state.jsonify().to_string());
     }
 
     fn on_message_receive(&mut self, from: PeerId, message: WebSocketMessage) -> Result<(), Disconnect> {
         let player = self.active_players.get_mut(&from).unwrap();
 
-        match handle_request(&mut player.0, message) {
-            Some(reply) => Ok(player.1.write_string(&reply.to_string())?),
-            None => Err(Disconnect),
-        }
+        let color_chosen = Color::from_string(message.get_text()?)?;
+
+        player.game_state.do_move(color_chosen).ok()?;
+
+        player.game_state.do_move(
+            player.game_state.get_colors().into_iter()
+                .map(|color| {
+                    let mut next = player.game_state.clone();
+                    next.do_move(color).unwrap();
+                    let evaluation = max_advantage(next, false, false, DEPTH);
+                    (color, evaluation)
+                })
+                .max_by_key(|&(_, e)| e)
+                .unwrap()
+                .0
+        ).ok()?;
+
+        player.writer.write_string(&player.game_state.jsonify())?;
+
+        Ok(())
     }
 
     fn on_disconnect(&mut self, id: PeerId) {
@@ -50,26 +77,6 @@ impl GlobalState for FillerGlobalState {
 }
 
 
-fn handle_request(game_state: &mut GameState, message: WebSocketMessage) -> Option<Json> {
-    let color_chosen = Color::from_string(message.get_text()?)?;
-
-    game_state.do_move(color_chosen).ok()?;
-
-    game_state.do_move(
-        game_state.get_colors().into_iter()
-            .map(|color| {
-                let mut next = game_state.clone();
-                next.do_move(color).unwrap();
-                let evaluation = max_advantage(next, false, false, DEPTH);
-                (color, evaluation)
-            })
-            .max_by_key(|&(_, e)| e)
-            .unwrap()
-            .0
-    ).ok()?;
-
-    Some(game_state.jsonify())
-}
 
 
 fn max_advantage(game_state: GameState, is_left: bool, is_our_turn: bool, depth_left: usize) -> isize {
@@ -120,43 +127,23 @@ impl GameState {
         }
     }
 
-    pub fn jsonify(&self) -> Json {
-        let mut map = HashMap::new();
+    pub fn jsonify(&self) -> String {
+        let left_territory = self.left_territory.iter()
+            .map(|&(x, y)| jsont!({x: (x as f64), y: (y as f64)}))
+            .collect();
+        let right_territory = self.right_territory.iter()
+            .map(|&(x, y)| jsont!({x: (x as f64), y: (y as f64)}))
+            .collect();
 
-        map.insert("field".to_string(), self.field.jsonify());
+        let available_colors = Json::Array(self.valid_colors().iter().map(|c| c.jsonify()).collect());
 
-        map.insert(
-            "leftTerritory".to_string(),
-            Json::Array(self.left_territory.iter()
-                .map(|&(x, y)|
-                    Json::Object(
-                        [
-                            ("x".to_string(), Json::Number(x as f64)),
-                            ("y".to_string(), Json::Number(y as f64))
-                        ].iter().cloned().collect()
-                    )
-                )
-                .collect()
-            )
-        );
-        map.insert(
-            "rightTerritory".to_string(),
-            Json::Array(self.right_territory.iter()
-                .map(|&(x, y)|
-                    Json::Object(
-                        [
-                            ("x".to_string(), Json::Number(x as f64)),
-                            ("y".to_string(), Json::Number(y as f64))
-                        ].iter().cloned().collect()
-                    )
-                )
-                .collect()
-            )
-        );
-
-        map.insert("isLeftTurn".to_string(), Json::Boolean(self.is_left_turn));
-
-        Json::Object(map)
+        jsons!({
+            field: (self.field.jsonify()),
+            leftTerritory: (Json::Array(left_territory)),
+            rightTerritory: (Json::Array(right_territory)),
+            isLeftTurn: (self.is_left_turn),
+            availableColors: available_colors,
+        })
     }
 
     fn reasonable_colors(&self) -> HashSet<Color> {
