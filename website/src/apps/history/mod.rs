@@ -1,4 +1,4 @@
-use server::{GlobalState, PeerId, Drop};
+use server::{GlobalState, PeerId, Disconnect};
 use web_socket::{WebSocketMessage, WebSocketWriter};
 use std::collections::{HashMap};
 
@@ -28,7 +28,7 @@ impl GlobalState for HistoryGlobalState {
         self.users.insert(id, writer);
     }
 
-    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> Result<(), Drop> {
+    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> Result<(), Disconnect> {
         println!("{:?}: {}", id, message.get_text()?);
         let json_text = Json::from_str(message.get_text()?).ok()?;
         let json = json_text.get_object()?;
@@ -96,7 +96,7 @@ impl GlobalState for HistoryGlobalState {
         Ok(())
     }
 
-    fn on_drop(&mut self, id: PeerId) {
+    fn on_disconnect(&mut self, id: PeerId) {
         // what game_id were they in?
 
         if let Some(game_id) = self.users.get_game_id(id) {
@@ -287,7 +287,7 @@ fn get_chapter_thing(string: &str) -> Result<(u8, u8), LobbyCreateError> {
 }
 
 trait GameSpecific: Send+Debug {
-    fn receive_message(&mut self, id: PeerId, message: &HashMap<String, Json>, users: &mut Users, vocabulary: &mut VocabularyModel) -> Result<(), Drop>;
+    fn receive_message(&mut self, id: PeerId, message: &HashMap<String, Json>, users: &mut Users, vocabulary: &mut VocabularyModel) -> Result<(), Disconnect>;
     fn periodic(&mut self, users: &mut Users, vocabulary: &mut VocabularyModel);
     fn leave(&mut self, id: PeerId, users: &mut Users, vocabulary: &mut VocabularyModel) -> bool;
 }

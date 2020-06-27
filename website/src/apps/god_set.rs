@@ -1,4 +1,4 @@
-use server::{GlobalState, PeerId, Drop};
+use server::{GlobalState, PeerId, Disconnect};
 use std::io::{BufReader, BufRead};
 use std::fs::File;
 use crate::GOD_SET_PATH;
@@ -48,9 +48,9 @@ impl GlobalState for GodSetGlobalState {
         let _ = tcp_stream.write_string(&self.json);
     }
 
-    fn on_message_receive(&mut self, _id: PeerId, _message: WebSocketMessage) -> Result<(), Drop> { Err(Drop) }
+    fn on_message_receive(&mut self, _id: PeerId, _message: WebSocketMessage) -> Result<(), Disconnect> { Err(Disconnect) }
 
-    fn on_drop(&mut self, _id: PeerId) { }
+    fn on_disconnect(&mut self, _id: PeerId) { }
 
     fn periodic(&mut self) { }
 }

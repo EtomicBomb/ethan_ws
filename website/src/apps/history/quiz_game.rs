@@ -1,7 +1,7 @@
 use crate::apps::history::{GameSpecific, Users};
 use crate::apps::history::vocabulary_model::{VocabularyModel, Query, MultipleChoiceQuestion};
 
-use server::{PeerId, Drop};
+use server::{PeerId, Disconnect};
 use json::{Json, jsons, jsont};
 use std::collections::HashMap;
 
@@ -42,7 +42,7 @@ impl QuizGame {
 }
 
 impl GameSpecific for QuizGame {
-    fn receive_message(&mut self, id: PeerId, message: &HashMap<String, Json>, users: &mut Users, vocabulary: &mut VocabularyModel) -> Result<(), Drop> {
+    fn receive_message(&mut self, id: PeerId, message: &HashMap<String, Json>, users: &mut Users, vocabulary: &mut VocabularyModel) -> Result<(), Disconnect> {
         match message.get("kind")?.get_string()? {
             "nextQuestion" if id == self.host => {
                 // update all of our scores first
@@ -85,7 +85,7 @@ impl GameSpecific for QuizGame {
                 vocabulary.log_multiple_choice_answer(&self.current_question, response);
                 self.submitted_answers.insert(id, response);
             },
-            _ => return Err(Drop),
+            _ => return Err(Disconnect),
         }
 
         Ok(())

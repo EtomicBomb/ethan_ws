@@ -1,4 +1,4 @@
-use server::{PeerId, Drop};
+use server::{PeerId, Disconnect};
 use crate::apps::pusoy::Member;
 use crate::apps::pusoy::game::GameState;
 use json::Json;
@@ -17,7 +17,7 @@ impl PusoyGame {
         PusoyGame { players, state }
     }
 
-    pub fn receive_message(&mut self, _id: PeerId, _message: &HashMap<String, Json>) -> Result<(), Drop> {
+    pub fn receive_message(&mut self, _id: PeerId, _message: &HashMap<String, Json>) -> Result<(), Disconnect> {
         todo!()
     }
 

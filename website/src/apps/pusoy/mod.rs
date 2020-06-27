@@ -1,6 +1,6 @@
 use rand::{Rng, thread_rng};
 use std::collections::HashSet;
-use server::{GlobalState, PeerId, Drop};
+use server::{GlobalState, PeerId, Disconnect};
 use web_socket::{WebSocketWriter, WebSocketMessage};
 use std::fmt::Debug;
 use std::collections::HashMap;
@@ -76,7 +76,7 @@ impl GlobalState for PusoyGlobalState {
         self.unregistered_users.insert(id, writer);
     }
 
-    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> Result<(), Drop> {
+    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> Result<(), Disconnect> {
         println!("{:?}: {}", id, message.get_text()?);
         let json_text: Json = message.get_text()?.parse().ok()?;
         let json = json_text.get_object()?;
@@ -126,7 +126,7 @@ impl GlobalState for PusoyGlobalState {
 
     }
 
-    fn on_drop(&mut self, id: PeerId) {
+    fn on_disconnect(&mut self, id: PeerId) {
         if let Some(game_id) = self.in_game.get(&id) {
             if let Some(lobby) = self.lobbies.get_mut(&game_id) {
                 let host_left = lobby.leave(id);
@@ -317,7 +317,7 @@ fn classify(play: &Play) -> (PlayKind, Card) {
 }
 
 
-// fn main() {
+// fn website() {
 //     let players: Vec<Box<dyn Player>> = vec![
 //         Box::new(HumanPlayer),
 //         Box::new(MachinePlayer),

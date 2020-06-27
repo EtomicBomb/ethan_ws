@@ -124,20 +124,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "main"
-version = "0.1.0"
-dependencies = [
- "bincode",
- "json",
- "lazy_static",
- "rand",
- "serde",
- "server",
- "vec_map",
- "web_socket",
-]
-
-[[package]]
 name = "maplit"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -350,3 +336,17 @@ checksum = "cccddf32554fecc6acb585f82a32a72e28b48f8c4c1883ddfeeeaa96f7d8e519"
 [[package]]
 name = "web_socket"
 version = "0.1.0"
+
+[[package]]
+name = "website"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "json",
+ "lazy_static",
+ "rand",
+ "serde",
+ "server",
+ "vec_map",
+ "web_socket",
+]

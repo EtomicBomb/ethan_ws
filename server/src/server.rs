@@ -17,6 +17,7 @@ use std::time::Duration;
 use std::hash::Hash;
 
 pub struct Server {
+    name: String,
     map: HashMap<String, Arc<Mutex<dyn GlobalState>>>,
     peer_id_generator: PeerIdGenerator,
 
@@ -26,8 +27,9 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(resources_root: PathBuf, max_http_request_size: usize, period_length: Duration) -> Server {
+    pub fn new(name: String, resources_root: PathBuf, max_http_request_size: usize, period_length: Duration) -> Server {
         Server {
+            name,
             map: HashMap::new(),
             peer_id_generator: PeerIdGenerator::new(),
             resources_root,
@@ -37,12 +39,13 @@ impl Server {
     }
 
     pub fn start(self) {
+        let name = self.name.clone();
         let period_length = self.period_length;
 
         let arc = Arc::new(self);
 
         let arc_clone = Arc::clone(&arc);
-        thread::Builder::new().name("server_listener".into()).spawn(move || {
+        thread::Builder::new().name(format!("{}_listen", name)).spawn(move || {
 
             for tcp_stream in TcpListener::bind("0.0.0.0:8080").unwrap().incoming() {
                 if let Ok(tcp_stream) = tcp_stream {
@@ -55,7 +58,6 @@ impl Server {
         // our periodic loop
         loop {
             arc.periodic();
-
             thread::sleep(period_length);
         }
     }
@@ -68,7 +70,7 @@ impl Server {
         let id = self.peer_id_generator.next();
         let self_clone = Arc::clone(self);
 
-        thread::Builder::new().name(format!("server/{}", id.stringify())).spawn(move || {
+        thread::Builder::new().name(format!("{}/{}", self.name, id.stringify())).spawn(move || {
 
             if let Some(request) = get_request(&mut tcp_stream, self_clone.max_http_request_size) {
                 self_clone.handle_request(request, tcp_stream, id);
@@ -103,11 +105,11 @@ impl Server {
             for message in WebSocketListener::new(tcp_stream) {
                 match state.lock().unwrap().on_message_receive(id, message) {
                     Ok(()) => {},
-                    Err(Drop) => break,
+                    Err(Disconnect) => break,
                 }
             }
 
-            state.lock().unwrap().on_drop(id);
+            state.lock().unwrap().on_disconnect(id);
         }
     }
 
@@ -120,20 +122,20 @@ impl Server {
 
 pub trait GlobalState: Send {
     fn new_peer(&mut self, id: PeerId, tcp_stream: WebSocketWriter);
-    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> Result<(), Drop>;
-    fn on_drop(&mut self, id: PeerId);
+    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> Result<(), Disconnect>;
+    fn on_disconnect(&mut self, id: PeerId);
     fn periodic(&mut self);
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct Drop;
+pub struct Disconnect;
 
-impl From<io::Error> for Drop {
-    fn from(_: io::Error) -> Drop { Drop }
+impl From<io::Error> for Disconnect {
+    fn from(_: io::Error) -> Disconnect { Disconnect }
 }
 
-impl From<NoneError> for Drop {
-    fn from(_: NoneError) -> Drop { Drop }
+impl From<NoneError> for Disconnect {
+    fn from(_: NoneError) -> Disconnect { Disconnect }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]

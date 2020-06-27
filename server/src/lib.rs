@@ -4,4 +4,4 @@ mod util;
 mod http_handler;
 mod server;
 
-pub use server::{Server, PeerId, Drop, GlobalState};
+pub use server::{Server, PeerId, Disconnect, GlobalState};

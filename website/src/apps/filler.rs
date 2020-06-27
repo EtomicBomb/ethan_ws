@@ -6,7 +6,7 @@ use std::collections::{HashSet, HashMap};
 use web_socket::{WebSocketMessage, WebSocketWriter};
 use json::Json;
 
-use server::{PeerId, GlobalState, Drop};
+use server::{PeerId, GlobalState, Disconnect};
 
 
 const WIDTH: usize = 8;
@@ -33,16 +33,16 @@ impl GlobalState for FillerGlobalState {
         let _ = player.1.write_string(&player.0.jsonify().to_string());
     }
 
-    fn on_message_receive(&mut self, from: PeerId, message: WebSocketMessage) -> Result<(), Drop> {
+    fn on_message_receive(&mut self, from: PeerId, message: WebSocketMessage) -> Result<(), Disconnect> {
         let player = self.active_players.get_mut(&from).unwrap();
 
         match handle_request(&mut player.0, message) {
             Some(reply) => Ok(player.1.write_string(&reply.to_string())?),
-            None => Err(Drop),
+            None => Err(Disconnect),
         }
     }
 
-    fn on_drop(&mut self, id: PeerId) {
+    fn on_disconnect(&mut self, id: PeerId) {
         self.active_players.remove(&id);
     }
 

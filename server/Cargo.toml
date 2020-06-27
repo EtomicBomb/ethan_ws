@@ -12,6 +12,5 @@ sha1 = "0.6.0"
 rand = "0.7.3"
 
 json = { path = "../json" }
-#lisp = { path = "../lisp" }
 web_socket = { path = "../web_socket" }
 http = { path = "../http" }

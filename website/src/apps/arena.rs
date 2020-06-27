@@ -1,4 +1,4 @@
-use server::{PeerId, Drop, GlobalState};
+use server::{PeerId, Disconnect, GlobalState};
 use std::collections::HashMap;
 use web_socket::{WebSocketMessage, WebSocketWriter};
 use json::{jsont, Json};
@@ -18,14 +18,14 @@ impl GlobalState for ArenaGlobalState {
         // self.announce();
     }
 
-    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> Result<(), Drop> {
+    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> Result<(), Disconnect> {
         match self.message_receive_handler(id, message) {
             Some(()) => Ok(()),
-            None => Err(Drop),
+            None => Err(Disconnect),
         }
     }
 
-    fn on_drop(&mut self, id: PeerId) {
+    fn on_disconnect(&mut self, id: PeerId) {
         self.players.remove(&id);
         // self.announce();
     }

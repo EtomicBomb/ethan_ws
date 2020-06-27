@@ -3,7 +3,7 @@ use std::time::{UNIX_EPOCH, SystemTime};
 use rand::{thread_rng, Rng, random};
 
 use crate::{GOD_SET_PATH};
-use server::{GlobalState, PeerId, Drop};
+use server::{GlobalState, PeerId, Disconnect};
 use json::Json;
 use std::str::FromStr;
 use rand::seq::SliceRandom;
@@ -33,8 +33,8 @@ impl GlobalState for TanksGlobalState {
         self.announce();
     }
     
-    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> Result<(), Drop> {
-        if !self.has_player(id) { return Err(Drop) } // that means we're dead!
+    fn on_message_receive(&mut self, id: PeerId, message: WebSocketMessage) -> Result<(), Disconnect> {
+        if !self.has_player(id) { return Err(Disconnect) } // that means we're dead!
 
         let a = Json::from_str(message.get_text()?).ok()?;
         let map = a.get_object()?;
@@ -50,7 +50,7 @@ impl GlobalState for TanksGlobalState {
                     self.announce();
                     Ok(())
                 } else {
-                    Err(Drop)
+                    Err(Disconnect)
                 }
             },
             "fire" => {
@@ -59,11 +59,11 @@ impl GlobalState for TanksGlobalState {
                 self.announce();
                 Ok(())
             },
-            _ => Err(Drop),
+            _ => Err(Disconnect),
         }
     }
 
-    fn on_drop(&mut self, id: PeerId) {
+    fn on_disconnect(&mut self, id: PeerId) {
         self.remove_player(id);
     }
 
