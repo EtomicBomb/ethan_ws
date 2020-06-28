@@ -14,9 +14,9 @@ macro_rules! jsont {
 
     ([$($e:tt),*]) => {
         json::Json::Array(vec![
-        $(
+            $(
             json::jsont!($e),
-        )*
+            )*
         ])
     };
 

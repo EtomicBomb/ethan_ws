@@ -9,8 +9,8 @@ use json::{Json, jsont, jsons};
 use server::{PeerId, GlobalState, Disconnect};
 
 
-const WIDTH: usize = 8;
-const HEIGHT: usize = 7;
+const WIDTH: usize = 10;
+const HEIGHT: usize = 10;
 const N_COLORS: u8 = 6;
 const DEPTH: usize = 4;
 
@@ -131,6 +131,7 @@ impl GameState {
         let left_territory = self.left_territory.iter()
             .map(|&(x, y)| jsont!({x: (x as f64), y: (y as f64)}))
             .collect();
+
         let right_territory = self.right_territory.iter()
             .map(|&(x, y)| jsont!({x: (x as f64), y: (y as f64)}))
             .collect();
@@ -143,6 +144,7 @@ impl GameState {
             rightTerritory: (Json::Array(right_territory)),
             isLeftTurn: (self.is_left_turn),
             availableColors: available_colors,
+            surrounding: (self.surrounding_territory())
         })
     }
 
@@ -168,6 +170,24 @@ impl GameState {
             }
         }
         surrounding_colors
+    }
+
+    fn surrounding_territory(&self) -> Json {
+        let mut squares = Vec::new();
+
+        for &(x, y) in self.left_territory.iter() {
+            // we use wrapping sub mostly because i'm lazy and it works because if x == 0 and we do a wrapping sub,
+            // we're gonna to get a None value from our field.get
+            for &(around_x, around_y) in [(x, y.wrapping_sub(1)), (x, y + 1), (x.wrapping_sub(1), y), (x + 1, y)].iter() {
+                if let Some(color) = self.field.get(around_x, around_y) {
+                    if color != self.left_color() && color != self.right_color() {
+                        squares.push(jsont!({x:around_x,y:around_y}));
+                    }
+                }
+            }
+        }
+
+        Json::Array(squares)
     }
 
     fn left_color(&self) -> Color {

@@ -6,14 +6,7 @@ use std::time::Duration;
 use std::path::PathBuf;
 
 mod apps;
-
-use crate::apps::filler::{FillerGlobalState};
-use crate::apps::god_set::GodSetGlobalState;
-use crate::apps::tanks::TanksGlobalState;
-use crate::apps::history::HistoryGlobalState;
-use crate::apps::arena::ArenaGlobalState;
-use crate::apps::secure::SecureGlobalState;
-use crate::apps::pusoy::PusoyGlobalState;
+use apps::*;
 
 const RESOURCES_PATH: &'static str = "/home/pi/Desktop/server/resources";
 const GOD_SET_PATH: &'static str = "/home/pi/Desktop/server/resources/apush/godset.txt";
