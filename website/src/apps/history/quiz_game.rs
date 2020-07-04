@@ -3,12 +3,12 @@ use crate::apps::history::vocabulary_model::{VocabularyModel, Query, MultipleCho
 
 use server::{PeerId, Disconnect};
 use json::{Json, jsons, jsont};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
 pub struct QuizGame {
     host: PeerId,
-    players: Vec<PeerId>,
+    players: HashSet<PeerId>,
     query: Query,
     current_question: MultipleChoiceQuestion,
     submitted_answers: HashMap<PeerId, usize>,
@@ -16,7 +16,7 @@ pub struct QuizGame {
 }
 
 impl QuizGame {
-    pub fn new(host: PeerId, players: Vec<PeerId>, mut query: Query, vocabulary: &mut VocabularyModel, users: &mut Users) -> QuizGame {
+    pub fn new(host: PeerId, players: HashSet<PeerId>, mut query: Query, vocabulary: &mut VocabularyModel, users: &mut Users) -> QuizGame {
         let current_question = query.get_multiple_choice(vocabulary);
         let question_json = current_question.jsonify(vocabulary);
 
@@ -103,7 +103,7 @@ impl GameSpecific for QuizGame {
             }
 
         } else {
-            self.players.remove_item(&id);
+            self.players.remove(&id);
             self.scores.remove(&id);
             self.submitted_answers.remove(&id);
 

@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 pub mod finder;
 use finder::Finder;
 
-use crate::apps::pusoy::card::Card;
+use crate::apps::pusoy::cards::Card;
 use std::cmp::Ordering;
-
+use crate::apps::pusoy::Cards;
 
 
 #[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Debug, Hash, Deserialize, Serialize)]
@@ -37,15 +37,15 @@ impl PlayKind {
 
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash, Deserialize, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, Deserialize, Serialize)]
 pub struct Play {
-    cards: Vec<Card>,
+    cards: Cards,
     kind: PlayKind,
     ranking_card: Option<Card>,
 }
 
 impl Ord for Play {
-    fn cmp(&self, other: &Self) -> Ordering {
+    fn cmp(&self, other: &Play) -> Ordering {
         if self.is_pass() { unimplemented!() }
 
         self.kind.cmp(&other.kind)
@@ -54,8 +54,8 @@ impl Ord for Play {
 }
 
 impl PartialOrd for Play {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(&other))
+    fn partial_cmp(&self, other: &Play) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -63,20 +63,22 @@ impl PartialOrd for Play {
 impl Play {
     pub fn pass() -> Play {
         Play {
-            cards: vec![],
+            cards: Cards::empty(),
             kind: PlayKind::Pass,
             ranking_card: None,
         }
     }
 
-    pub fn new(kind: PlayKind, ranking_card: Card, mut cards: Vec<Card>) -> Play {
-        cards.sort(); // so we can do binary search
-
+    pub fn new(kind: PlayKind, ranking_card: Card, cards: Cards) -> Play {
         Play {
             cards,
             kind,
             ranking_card: Some(ranking_card),
         }
+    }
+
+    pub fn infer_from_cards(cards: Cards) -> Option<Play> {
+        Finder::new(cards).infer()
     }
 
     #[inline]
@@ -85,12 +87,12 @@ impl Play {
     }
 
     #[inline]
-    pub fn len_eq(&self, other: &Self) -> bool {
+    pub fn len_eq(&self, other: &Play) -> bool {
         self.kind.len() == other.kind.len()
     }
 
     #[inline]
-    pub fn can_play_on(&self, other: &Self) -> bool {
+    pub fn can_play_on(&self, other: &Play) -> bool {
         if self.is_pass() { return true }
 
         if self.kind.len() != other.kind.len() {
@@ -103,14 +105,10 @@ impl Play {
     }
 
     #[inline]
-    pub fn doesnt_contain(&self, card: &Card) -> bool {
-        self.cards().binary_search(card).is_err()
+    pub fn doesnt_contain(&self, card: Card) -> bool {
+        !self.cards.contains(card)
     }
 
-    pub fn infer_from_cards(cards: Vec<Card>) -> Option<Play> {
-        let finder = Finder::new(cards);
-        finder.infer()
-    }
 
     pub fn kind(&self) -> PlayKind {
         self.kind
@@ -121,14 +119,10 @@ impl Play {
         self.ranking_card
     }
 
-    #[inline]
-    pub fn into_cards(self) -> Vec<Card> {
-        self.cards
-    }
 
     #[inline]
-    pub fn cards(&self) -> &[Card] {
-        &self.cards
+    pub fn cards(&self) -> Cards {
+        self.cards
     }
 
     pub fn replace_kind(&mut self, kind: PlayKind) {

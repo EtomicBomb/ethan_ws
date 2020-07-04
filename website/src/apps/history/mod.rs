@@ -1,6 +1,6 @@
 use server::{GlobalState, PeerId, Disconnect};
 use web_socket::{WebSocketMessage, WebSocketWriter};
-use std::collections::{HashMap};
+use std::collections::{HashMap, HashSet};
 
 use json::{Json, jsons, jsont};
 use std::str::FromStr;
@@ -141,7 +141,7 @@ impl HistoryGlobalState {
 #[derive(Debug)]
 struct Lobby {
     host: PeerId,
-    peers: Vec<PeerId>,
+    peers: HashSet<PeerId>,
     query: Query,
     game_kind: GameKind,
 }
@@ -157,7 +157,7 @@ impl Lobby {
 
         let game_kind = GameKind::from_str(json_map.get("gameKind")?.get_string()?)?;
 
-        Ok(Lobby { host, peers: Vec::new(), query, game_kind })
+        Ok(Lobby { host, peers: HashSet::new(), query, game_kind })
     }
 
     fn into_game(self, vocabulary: &mut VocabularyModel, users: &mut Users) -> Box<dyn GameSpecific> {
@@ -166,7 +166,7 @@ impl Lobby {
 
     fn join(&mut self, user: PeerId, game_id: GameId, users: &mut Users) {
         if !self.peers.contains(&user) {
-            self.peers.push(user);
+            self.peers.insert(user);
             users.add_game_id(user, game_id);
             let host_username = users.get_username(self.host).to_string();
             let _ = users.get_writer(user).write_string(&jsons!({
@@ -183,7 +183,7 @@ impl Lobby {
         if host_left {
             self.send_to_all(users,jsons!({kind:"hostAbandoned"})); // what the fuck????
         } else if self.peers.contains(&id) {
-            self.peers.remove(self.peers.iter().position(|&u| u == id).unwrap());
+            self.peers.remove(&id);
             self.announce_members(users);
         }
 
@@ -235,7 +235,7 @@ impl GameKind {
         }
     }
 
-    fn into_game(self, host: PeerId, peers: Vec<PeerId>, query: Query, vocabulary: &mut VocabularyModel, users: &mut Users) -> Box<dyn GameSpecific> {
+    fn into_game(self, host: PeerId, peers: HashSet<PeerId>, query: Query, vocabulary: &mut VocabularyModel, users: &mut Users) -> Box<dyn GameSpecific> {
         match self {
             GameKind::Quiz => Box::new(QuizGame::new(host, peers, query, vocabulary, users)),
             GameKind::Rocket => Box::new(QuizGame::new(host, peers, query, vocabulary, users)),

@@ -66,7 +66,7 @@ impl Server {
         self.map.insert(location, global_state);
     }
 
-    pub fn handle_new_connection(self: &Arc<Server>, mut tcp_stream: TcpStream) {
+    fn handle_new_connection(self: &Arc<Server>, mut tcp_stream: TcpStream) {
         let id = self.peer_id_generator.next();
         let self_clone = Arc::clone(self);
 
@@ -89,9 +89,7 @@ impl Server {
             let response = format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n", digest);
 
             if tcp_stream.write_all(response.as_bytes()).is_ok() {
-                if let Some(state) = self.map.get(request.resource_location()) {
-                    Server::on_new_web_socket_connection(tcp_stream, id, state);
-                }
+                self.on_new_web_socket_connection(request, tcp_stream, id);
             }
 
         } else {
@@ -100,20 +98,22 @@ impl Server {
         }
     }
 
-    fn on_new_web_socket_connection(tcp_stream: TcpStream, id: PeerId, state: &Arc<Mutex<dyn GlobalState>>) {
-        state.lock().unwrap().new_peer(id, WebSocketWriter::new(tcp_stream.try_clone().unwrap()));
+    fn on_new_web_socket_connection(&self, request: HttpRequest, tcp_stream: TcpStream, id: PeerId) {
+        if let Some(state) = self.map.get(request.resource_location()) {
+            state.lock().unwrap().new_peer(id, WebSocketWriter::new(tcp_stream.try_clone().unwrap()));
 
-        for message in WebSocketListener::new(tcp_stream) {
-            match state.lock().unwrap().on_message_receive(id, message) {
-                Ok(()) => {},
-                Err(Disconnect) => break,
+            for message in WebSocketListener::new(tcp_stream) {
+                match state.lock().unwrap().on_message_receive(id, message) {
+                    Ok(()) => {},
+                    Err(Disconnect) => break,
+                }
             }
-        }
 
-        state.lock().unwrap().on_disconnect(id);
+            state.lock().unwrap().on_disconnect(id);
+        }
     }
 
-    pub fn periodic(&self) {
+    fn periodic(&self) {
         for state in self.map.values() {
             state.lock().unwrap().periodic();
         }

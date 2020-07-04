@@ -3,11 +3,11 @@ use vec_map::{VecMap};
 use std::f64::INFINITY;
 use std::io;
 
-use crate::apps::pusoy::card::{Card, THREE_OF_CLUBS};
-use crate::apps::pusoy::game::SafeGameInterface;
+use crate::apps::pusoy::cards::{Card};
+use crate::apps::pusoy::state::SafeGameInterface;
 use crate::apps::pusoy::play::finder::Finder;
 use crate::apps::pusoy::play::{Play};
-use crate::apps::pusoy::get_expected_pass_count;
+use crate::apps::pusoy::{get_expected_pass_count, Cards};
 
 pub trait Player {
     fn choose_play(&self, game: SafeGameInterface) -> Play;
@@ -18,13 +18,12 @@ pub struct HumanPlayer;
 impl Player for HumanPlayer {
     fn choose_play(&self, game: SafeGameInterface) -> Play {
         loop {
-            let mut your_hand = game.my_hand().to_vec();
-            your_hand.sort();
+            let your_hand = game.my_hand();
             println!("your turn - {:?}", your_hand);
             let mut cards_string = String::new();
             io::stdin().read_line(&mut cards_string).unwrap();
 
-            let cards: Vec<Card> = cards_string
+            let cards: Cards = cards_string
                 .split_whitespace()
                 .map(|c| c.parse().unwrap())
                 .collect();
@@ -51,11 +50,11 @@ impl Player for MachinePlayer {
 
         let desired_play = best_play(game);
 
-        match game.can_play(desired_play.into_cards()) {
+        match game.can_play(desired_play.cards()) {
             Ok(play) => play,
             Err(_) => {
                 // we're gonna have to pass here
-                match game.can_play(vec![]) {
+                match game.can_play(Cards::empty()) {
                     Ok(pass) => pass,
                     Err(e) => unreachable!("{:?}", e),
                 }
@@ -66,7 +65,7 @@ impl Player for MachinePlayer {
 
 pub fn best_play(game: SafeGameInterface) -> Play {
     let my_hand = game.my_hand();
-    let plays_available = Finder::new(my_hand.to_vec()).all_plays();
+    let plays_available = Finder::new(my_hand).all_plays();
 
 
     let potential_inserts = PotentialInserts::new(my_hand);
@@ -110,7 +109,7 @@ fn cost_of_tail(
 
             let mut plays_available_to_child = Vec::with_capacity(plays_available.len());
             for p in plays_available.iter() {
-                if p.cards().iter().all(|c| play.doesnt_contain(c)) {
+                if p.cards().is_disjoint(play.cards()) {
                     plays_available_to_child.push(p.clone());
                 }
             }
@@ -177,7 +176,7 @@ impl<'a> SearchState {
     fn add_play(&mut self, play: &Play, game_interface: SafeGameInterface) {
         self.total_cost += match self.status {
             Status::FirstTurnOfGame => {
-                if play.cards().contains(&THREE_OF_CLUBS) {
+                if play.cards().contains(Card::THREE_OF_CLUBS) {
                     1.0 // we literally won't be able to pass
                 } else {
                     INFINITY // this is always unplayable
@@ -216,22 +215,22 @@ impl<'a> SearchState {
 
 
 struct PotentialInserts {
-    map: [u8; 52],
+    map: [usize; 52],
 }
 
 impl PotentialInserts {
-    fn new(cards: &[Card]) -> PotentialInserts {
+    fn new(cards: Cards) -> PotentialInserts {
         let mut map = [0; 52];
-        for (card, i) in cards.iter().zip(0..) {
-            map[card.numeric_value()] = i;
+        for (i, card) in cards.iter().enumerate() {
+            map[card.get_index() as usize] = i;
         }
 
         PotentialInserts { map }
     }
 
     #[inline]
-    fn get_offset(&self, card: Card) -> u8 {
-        self.map[card.numeric_value()]
+    fn get_offset(&self, card: Card) -> usize {
+        self.map[card.get_index() as usize]
     }
 }
 
@@ -256,8 +255,8 @@ impl CardsUsedSoFar {
 
 
     #[inline]
-    fn add_cards(&mut self, cards: &[Card], potential_inserts: &PotentialInserts) {
-        for &card in cards {
+    fn add_cards(&mut self, cards: Cards, potential_inserts: &PotentialInserts) {
+        for card in cards.iter() {
             self.add_card(card, potential_inserts);
         }
     }

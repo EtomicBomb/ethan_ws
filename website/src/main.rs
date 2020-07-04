@@ -1,4 +1,4 @@
-#![feature(try_trait, vec_remove_item, is_sorted)]
+#![feature(try_trait, is_sorted)]
 
 use std::sync::{Arc, Mutex};
 use server::Server;

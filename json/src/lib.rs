@@ -1,7 +1,6 @@
 pub mod json;
 
 pub use json::Json;
-// pub use json_macro::Jsonable;
 
 #[macro_export]
 macro_rules! jsons {

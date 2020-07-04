@@ -1,6 +1,6 @@
 use server::{PeerId, Disconnect};
 use crate::apps::pusoy::Member;
-use crate::apps::pusoy::game::GameState;
+use crate::apps::pusoy::state::GameState;
 use json::Json;
 use std::collections::HashMap;
 
@@ -11,8 +11,8 @@ pub struct PusoyGame {
 }
 
 impl PusoyGame {
-    pub fn new(host: Member, mut players: Vec<Member>) -> PusoyGame {
-        players.push(host);
+    ////////////////////////// HANDLERS //////////////////////////////////
+    pub fn new(players: Vec<Member>) -> PusoyGame {
         let state = GameState::new(players.len());
         PusoyGame { players, state }
     }
@@ -28,4 +28,16 @@ impl PusoyGame {
     pub fn leave(&mut self, _id: PeerId) -> bool {
         todo!()
     }
+
+    //////////////////////////// OTHER FUNCTIONS /////////////////////
+
+    fn tell_plays(&mut self) {
+
+        for (player, &hand) in self.players.iter_mut().zip(self.state.hands()) {
+
+        }
+
+    }
+
+
 }

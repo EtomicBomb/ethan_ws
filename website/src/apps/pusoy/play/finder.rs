@@ -1,31 +1,31 @@
 use crate::apps::pusoy::play::{Play, PlayKind};
 
-use crate::apps::pusoy::card::Card;
-use std::collections::HashSet;
-use crate::apps::pusoy::util::{counter, concat};
+use crate::apps::pusoy::cards::Card;
+use crate::apps::pusoy::util::{counter};
+use crate::apps::pusoy::Cards;
 
-fn rank_blocks(cards: &[Card]) -> [Vec<Card>; 13] {
-    let mut blocks: [Vec<Card>; 13] = Default::default();
+fn rank_blocks(cards: Cards) -> [Cards; 13] {
+    let mut blocks: [Cards; 13] = [Cards::EMPTY; 13];
 
-    for &card in cards {
-        blocks[card.rank as usize].push(card);
+    for card in cards.iter() {
+        blocks[card.rank() as usize].insert(card);
     }
 
     blocks
 }
 
-fn flushes(cards: &[Card]) -> Vec<Play> {
+fn flushes(cards: Cards) -> Vec<Play> {
     // collect all of the cards
-    let mut suit_blocks: [Vec<Card>; 4] = Default::default();
+    let mut suit_blocks: [Cards; 4] = [Cards::EMPTY; 4];
 
-    for &card in cards {
-        suit_blocks[card.suit as usize].push(card);
+    for card in cards.iter() {
+        suit_blocks[card.suit() as usize].insert(card);
     }
 
     // now, we just need to compute all of the flushes
     let mut chunks = Vec::new();
 
-    for block in suit_blocks.iter() {
+    for &block in suit_blocks.iter() {
         if block.len() < 5 {
             continue;
         }
@@ -33,7 +33,7 @@ fn flushes(cards: &[Card]) -> Vec<Play> {
         chunks.extend(
             permute(block, 5)
                 .into_iter()
-                .map(|cs| Play::new(PlayKind::Flush, max_card(&cs), cs)),
+                .map(|cs| Play::new(PlayKind::Flush, cs.max_card().unwrap(), cs)),
         );
     }
 
@@ -47,17 +47,15 @@ fn flushes(cards: &[Card]) -> Vec<Play> {
 
 #[derive(Clone, Debug)]
 pub struct Finder {
-    pub cards: Vec<Card>,
-    pub rank_blocks: [Vec<Card>; 13],
+    pub cards: Cards,
+    pub rank_blocks: [Cards; 13],
     flushes: Vec<Play>, // we store the flushes, because a `suit_blocks` data structure would be useless for anything else
 }
 
 impl Finder {
-    pub fn new(mut cards: Vec<Card>) -> Finder {
-        cards.sort();
-
-        let rank_blocks = rank_blocks(&cards);
-        let flushes = flushes(&cards);
+    pub fn new(cards: Cards) -> Finder {
+        let rank_blocks = rank_blocks(cards);
+        let flushes = flushes(cards);
 
         Finder {
             cards,
@@ -88,14 +86,14 @@ impl Finder {
     pub fn infer(&self) -> Option<Play> {
         Some(match self.cards.len() {
             0 => Play::pass(),
-            1 => Play::new(PlayKind::Single, self.cards[0], self.cards.clone()),
-            2 => Play::new(PlayKind::Pair, self.cards[1], if self.cards[0].rank == self.cards[1].rank { self.cards.clone() } else { return None }, ),
+            1 => Play::new(PlayKind::Single, self.cards.max_card().unwrap(), self.cards),
+            2 => Play::new(PlayKind::Pair, self.cards.max_card().unwrap(), if self.cards.all_same_rank() { self.cards } else { return None }, ),
             5 => self.max_five_of_a_kind()?,
             _ => return None,
         })
     }
 
-    pub fn max_five_of_a_kind(&self) -> Option<Play> {
+    fn max_five_of_a_kind(&self) -> Option<Play> {
         let strait_flushes = self.strait_flushes();
         if !strait_flushes.is_empty() {
             return strait_flushes.iter().max().cloned();
@@ -124,33 +122,35 @@ impl Finder {
         None
     }
 
-    pub fn singles(&self) -> Vec<Play> {
-        self.cards
-            .iter()
-            .map(|&c| Play::new(PlayKind::Single, c, vec![c]))
+    fn singles(&self) -> Vec<Play> {
+        self.cards.iter()
+            .map(|card| {
+                let mut cards = Cards::empty();
+                cards.insert(card);
+                Play::new(PlayKind::Single, card, cards)
+            })
             .collect()
     }
 
 
-    pub fn n_of_a_kinds(&self, n: usize) -> Vec<Vec<Card>> {
+    fn n_of_a_kinds(&self, n: usize) -> Vec<Cards> {
         let mut chunks = Vec::new();
 
-        for block in self.rank_blocks.iter() {
-            if block.len() < n {
-                continue;
-            } // this block is useless to us
+        for &block in self.rank_blocks.iter() {
+            if block.len() < n { continue } // this block is useless to us
+
             chunks.append(&mut permute(block, n));
         }
 
         chunks
     }
 
-    pub fn strait_flushes(&self) -> Vec<Play> {
+    fn strait_flushes(&self) -> Vec<Play> {
         let mut strait_flushes = Vec::new();
 
         for mut strait in self.straits() {
-            strait.replace_kind(PlayKind::StraitFlush);
-            if are_flush(strait.cards()) {
+            if strait.cards().all_same_suit() {
+                strait.replace_kind(PlayKind::StraitFlush);
                 strait_flushes.push(strait);
             }
         }
@@ -158,11 +158,11 @@ impl Finder {
         strait_flushes
     }
 
-    pub fn flushes(&self) -> Vec<Play> {
+    fn flushes(&self) -> Vec<Play> {
         self.flushes.clone()
     }
 
-    pub fn four_of_a_kinds(&self) -> Vec<Play> {
+    fn four_of_a_kinds(&self) -> Vec<Play> {
         // in pusoy, the four of a kind is played with a trash card
 
         let mut four_of_a_kinds = Vec::new();
@@ -170,9 +170,9 @@ impl Finder {
         for four_of_a_kind in self.n_of_a_kinds(4) {
             for card in self.cards.iter() {
                 if !four_of_a_kind.contains(card) {
-                    let mut collection = four_of_a_kind.clone();
-                    collection.push(*card);
-                    let play = Play::new(PlayKind::FourOfAKind, four_of_a_kind[3], collection);
+                    let mut collection = four_of_a_kind;
+                    collection.insert(card);
+                    let play = Play::new(PlayKind::FourOfAKind, four_of_a_kind.max_card().unwrap(), collection);
                     four_of_a_kinds.push(play);
                 }
             }
@@ -181,22 +181,23 @@ impl Finder {
         four_of_a_kinds
     }
 
-    pub fn pairs(&self) -> Vec<Play> {
+    fn pairs(&self) -> Vec<Play> {
         self.n_of_a_kinds(2)
             .into_iter()
-            .map(|cs| Play::new(PlayKind::Pair, cs[1], cs))
+            .map(|cards| Play::new(PlayKind::Pair, cards.max_card().unwrap(), cards))
             .collect()
     }
 
-    pub fn full_houses(&self) -> Vec<Play> {
+    fn full_houses(&self) -> Vec<Play> {
         let mut full_houses = Vec::new();
         let pairs = self.n_of_a_kinds(2);
 
         for three_of_a_kind in self.n_of_a_kinds(3) {
-            for pair in pairs.iter() {
-                if !do_overlap(&three_of_a_kind, pair) {
-                    let collection = concat(three_of_a_kind.clone(), pair.clone());
-                    let play = Play::new(PlayKind::FullHouse, three_of_a_kind[2], collection);
+            for &pair in pairs.iter() {
+                if three_of_a_kind.is_disjoint(pair) {
+                    let mut collection = pair;
+                    collection.insert_all(three_of_a_kind);
+                    let play = Play::new(PlayKind::FullHouse, three_of_a_kind.max_card().unwrap(), collection);
                     full_houses.push(play);
                 }
             }
@@ -205,65 +206,47 @@ impl Finder {
         full_houses
     }
 
-    pub fn straits(&self) -> Vec<Play> {
+    fn straits(&self) -> Vec<Play> {
         let mut straits = Vec::new();
 
-        let blocks_starting_at = |i: usize| (i..i + 5).map(|i| &self.rank_blocks[i % 13]);
+        let mut blocks = Vec::with_capacity(5);
 
-        for start_index in 0..13 {
-            strait_from_blocks(blocks_starting_at(start_index), &mut straits);
+        for i in 0..13 {
+            blocks.clear();
+            blocks.extend((i .. i+5).map(|i| self.rank_blocks[i % 13].cards_vec()));
+
+            strait_from_block(&blocks, &mut straits);
         }
 
         straits
     }
 }
 
-fn strait_from_blocks<'a>(
-    blocks: impl Clone + Iterator<Item = &'a Vec<Card>> + 'a,
+fn strait_from_block(
+    blocks: &[Vec<Card>],
     straits: &mut Vec<Play>,
 ) {
-    let base: Vec<usize> = blocks.clone().map(|b| b.len()).collect();
+    let base: Vec<usize> = blocks.iter().map(|b| b.len()).collect();
 
     let f = |x: &[usize]| {
-        let entry: Vec<Card> = blocks
-            .clone()
-            .zip(x.iter())
+        let entry: Cards = blocks.iter().zip(x.iter())
             .map(|(block, &i)| block[i])
             .collect();
 
-        let play = Play::new(PlayKind::Strait, max_card(&entry), entry);
+        let play = Play::new(PlayKind::Strait, entry.max_card().unwrap(), entry);
         straits.push(play);
     };
 
     counter(&base, f);
 }
 
-pub fn max_card(cards: &[Card]) -> Card {
-    *cards.iter().max_by(|a, b| a.cmp(b)).unwrap()
+fn permute(cards: Cards, len: usize) -> Vec<Cards> {
+    permute_helper(&cards.cards_vec(), len).into_iter()
+        .map(|cards| cards.into_iter().collect())
+        .collect()
 }
 
-
-fn do_overlap(cards: &[Card], other: &[Card]) -> bool {
-    // check if other and cards contain any of the same cards
-
-    let other_set: HashSet<Card> = other.iter().cloned().collect();
-
-    for card in cards {
-        if other_set.contains(card) {
-            return true;
-        }
-    }
-
-    false
-}
-
-fn are_flush(cards: &[Card]) -> bool {
-    let first_suit = cards[0].suit;
-
-    cards.iter().skip(1).all(|c| c.suit == first_suit)
-}
-
-fn permute<T: Clone>(list: &[T], n: usize) -> Vec<Vec<T>> {
+fn permute_helper(list: &[Card], n: usize) -> Vec<Vec<Card>> {
     assert!(list.len() >= n);
     let mut ret = Vec::new();
 
@@ -273,11 +256,10 @@ fn permute<T: Clone>(list: &[T], n: usize) -> Vec<Vec<T>> {
         ret.extend(list.iter().map(|i| vec![i.clone()]));
     } else {
         for i in 0..=list.len() - n {
-            let results = permute(&list[i + 1..], n - 1);
+            let results = permute_helper(&list[i + 1..], n - 1);
 
             for mut r in results {
                 r.insert(0, list[i].clone());
-                //r.push(list[i].clone());
                 ret.push(r);
             }
         }

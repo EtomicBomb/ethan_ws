@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use json::{Json, jsons, jsont};
 use std::io::{BufReader};
 use crate::apps::pusoy::play::{Play, PlayKind};
-use crate::apps::pusoy::card::Card;
+pub use crate::apps::pusoy::cards::{Card, Cards};
 use std::fs::{File};
 use crate::apps::pusoy::pusoy_game::PusoyGame;
 use crate::PUSOY_PASSING_MODEL_PATH;
@@ -17,8 +17,8 @@ use crate::WORD_LIST_PATH;
 use std::io::BufRead;
 
 mod bot;
-mod card;
-mod game;
+mod cards;
+mod state;
 mod util;
 mod play;
 mod pusoy_game;
@@ -31,13 +31,13 @@ lazy_static! {
             .map(|line| line.unwrap().trim().to_string())
             .collect();
 
-
         assert!(words.is_sorted());
         assert!(words.iter().all(|w| w.chars().all(|c| matches!(c, 'a'..='z' | '-'))));
 
         words
     };
 }
+
 
 pub struct PusoyGlobalState {
     unregistered_users: HashMap<PeerId, WebSocketWriter>,
@@ -111,7 +111,10 @@ impl GlobalState for PusoyGlobalState {
 
                 let mut lobby = self.lobbies.remove(&game_id)?;
                 lobby.announce_beginning();
-                self.active_games.insert(game_id, PusoyGame::new(lobby.host, lobby.players));
+
+                let mut players = lobby.players;
+                players.push(lobby.host);
+                self.active_games.insert(game_id, PusoyGame::new(players));
             }
             _ => {
                 let game_id = self.in_game.get(&id)?;
@@ -275,14 +278,12 @@ impl GameId {
 
 struct GameIdGenerator {
     unavailable: HashSet<usize>,
-    current_len: usize,
 }
 
 impl GameIdGenerator {
     fn new() -> GameIdGenerator {
         GameIdGenerator {
             unavailable: HashSet::new(),
-            current_len: 5,
         }
     }
 
