@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 pub mod finder;
 use finder::Finder;
 
-use crate::apps::pusoy::cards::Card;
+use crate::cards::Card;
 use std::cmp::Ordering;
-use crate::apps::pusoy::Cards;
+use crate::Cards;
 
 
 #[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Debug, Hash, Deserialize, Serialize)]

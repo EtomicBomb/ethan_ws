@@ -1,7 +1,7 @@
-use crate::apps::pusoy::play::Play;
-use crate::apps::pusoy::cards::{Card};
+use crate::play::Play;
+use crate::cards::{Card};
 use rand::{thread_rng, Rng};
-use crate::apps::pusoy::Cards;
+use crate::Cards;
 
 // MOTIVATION: if HumanPlayer or MachinePlayer had access to the regular GameState object,
 // they could call .hands and other info that would just be cheating. This struct only gives
@@ -21,7 +21,7 @@ impl<'a> SafeGameInterface<'a> {
     }
 
     #[inline]
-    pub fn can_play_bool(&self, play: &Play) -> bool {
+    pub fn can_play_bool(&self, play: Play) -> bool {
         self.inner.can_play_bool(play)
     }
 
@@ -30,8 +30,8 @@ impl<'a> SafeGameInterface<'a> {
     }
 
     #[inline]
-    pub fn get_play_on_table(&self) -> Option<&Play> {
-        self.inner.get_play_on_table()
+    pub fn cards_on_table(&self) -> Option<Play> {
+        self.inner.cards_on_table()
     }
 }
 
@@ -39,7 +39,7 @@ impl<'a> SafeGameInterface<'a> {
 pub struct GameState {
     hands: Vec<Cards>,
     pub current_player: usize,
-    cards_down: Option<Play>,
+    cards_on_table: Option<Play>,
     turn_index: usize, // need to store because on first turn, must play a hand with three of clubs
     last_player_to_not_pass: usize,
     players_count: usize,
@@ -62,7 +62,7 @@ impl GameState {
         GameState {
             hands,
             current_player,
-            cards_down: None,
+            cards_on_table: None,
             turn_index: 0,
             last_player_to_not_pass: current_player,
             players_count,
@@ -71,7 +71,7 @@ impl GameState {
     }
 
     #[inline]
-    pub fn can_play_bool(&self, play: &Play) -> bool {
+    pub fn can_play_bool(&self, play: Play) -> bool {
         // make sure we have all the cards in that play
         if !self.my_hand().is_superset_of(play.cards()) {
             return false;
@@ -92,7 +92,7 @@ impl GameState {
 
             // since we don't have control, we have to make sure they are making a valid play in the context
             // of the cards that they are trying to play on.
-            let cards_down = self.cards_down.as_ref().unwrap();
+            let cards_down = self.cards_on_table.as_ref().unwrap();
 
             // this is the problem
             if !play.len_eq(cards_down) {
@@ -130,7 +130,7 @@ impl GameState {
 
             // since we don't have control, we have to make sure they are making a valid play in the context
             // of the cards that they are trying to play on.
-            let cards_down = self.cards_down.as_ref().unwrap();
+            let cards_down = self.cards_on_table.as_ref().unwrap();
 
             // this is the problem
             if !play.len_eq(cards_down) {
@@ -157,7 +157,7 @@ impl GameState {
 
         if !play.is_pass() {
             self.last_player_to_not_pass = self.current_player;
-            self.cards_down = Some(play); // if we are passing, the card that the next person has to play on doesn't change
+            self.cards_on_table = Some(play); // if we are passing, the card that the next person has to play on doesn't change
         }
 
         self.turn_index += 1;
@@ -172,8 +172,8 @@ impl GameState {
         self.winning_player
     }
 
-    pub fn get_play_on_table(&self) -> Option<&Play> {
-        self.cards_down.as_ref()
+    pub fn cards_on_table(&self) -> Option<Play> {
+        self.cards_on_table
     }
 
     #[inline]
@@ -207,7 +207,7 @@ fn deal(players_count: usize) -> Vec<Cards> {
 
     let mut deck_remaining: Vec<Card> = Cards::entire_deck().iter().collect();
 
-    for i in (0..players_count).cycle() {
+    for i in (0..players_count).cycle().take(52) {
         let index = thread_rng().gen_range(0, deck_remaining.len());
         ret[i].insert(deck_remaining.remove(index));
     }

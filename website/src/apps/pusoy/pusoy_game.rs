@@ -1,12 +1,11 @@
 use server::{PeerId, Disconnect};
 use crate::apps::pusoy::Member;
-use crate::apps::pusoy::state::GameState;
+use pusoy::GameState;
 use json::Json;
 use std::collections::HashMap;
 
 pub struct PusoyGame {
     players: Vec<Member>, // includes host now
-
     state: GameState,
 }
 
@@ -38,6 +37,4 @@ impl PusoyGame {
         }
 
     }
-
-
 }

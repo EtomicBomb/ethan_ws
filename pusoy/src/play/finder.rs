@@ -1,8 +1,6 @@
-use crate::apps::pusoy::play::{Play, PlayKind};
-
-use crate::apps::pusoy::cards::Card;
-use crate::apps::pusoy::util::{counter};
-use crate::apps::pusoy::Cards;
+use crate::play::{Play, PlayKind};
+use crate::cards::Card;
+use crate::Cards;
 
 fn rank_blocks(cards: Cards) -> [Cards; 13] {
     let mut blocks: [Cards; 13] = [Cards::EMPTY; 13];
@@ -47,8 +45,8 @@ fn flushes(cards: Cards) -> Vec<Play> {
 
 #[derive(Clone, Debug)]
 pub struct Finder {
-    pub cards: Cards,
-    pub rank_blocks: [Cards; 13],
+    cards: Cards,
+    rank_blocks: [Cards; 13],
     flushes: Vec<Play>, // we store the flushes, because a `suit_blocks` data structure would be useless for anything else
 }
 
@@ -266,4 +264,36 @@ fn permute_helper(list: &[Card], n: usize) -> Vec<Vec<Card>> {
     }
 
     ret
+}
+
+#[inline]
+pub fn counter(base: &[usize], mut f: impl FnMut(&[usize])) {
+    // a generalized version of counting in an arbitrary base
+    // calls f on each number generated in the count
+    // for example, counter(&[2, 2, 2], f) calls f on:
+    //      &[0, 0, 0]
+    //      &[1, 0, 0]
+    //      &[0, 1, 0]
+    //      &[1, 1, 0]
+    //      etc.
+
+    let len = base.len();
+
+    let mut x = vec![0; len];
+
+    let iter_count: usize = base.iter().product();
+
+    for _ in 0..iter_count {
+        f(&x);
+
+        // try to "add one"
+        for i in 0..len {
+            if x[i] < base[i] - 1 {
+                x[i] += 1;
+                break;
+            }
+
+            x[i] = 0;
+        }
+    }
 }

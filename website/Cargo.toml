@@ -11,7 +11,5 @@ server = { path = "../server" }
 json = { path = "../json" }
 web_socket = { path = "../web_socket" }
 rand = "0.7.3"
-vec_map = "0.8.2"
 lazy_static = "1.4.0"
-serde = { version = "1.0.92", features = ["derive"] }
-bincode = "1.1.4"
+pusoy = { path = "../pusoy" }

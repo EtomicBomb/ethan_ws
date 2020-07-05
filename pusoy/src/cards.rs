@@ -110,7 +110,7 @@ pub struct CardsIter {
 
 impl CardsIter {
     fn new(cards: Cards) -> CardsIter {
-        let trailing_zeros = dbg!(cards.bits.trailing_zeros() as u8);
+        let trailing_zeros = cards.bits.trailing_zeros() as u8;
 
         CardsIter {
             bits: cards.bits.checked_shr(trailing_zeros as u32).unwrap_or(0),

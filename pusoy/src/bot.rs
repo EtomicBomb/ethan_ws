@@ -1,13 +1,16 @@
 use vec_map::{VecMap};
+use lazy_static::lazy_static;
 
 use std::f64::INFINITY;
-use std::io;
+use std::io::{self, BufReader};
+use std::fs::File;
+use std::collections::HashMap;
 
-use crate::apps::pusoy::cards::{Card};
-use crate::apps::pusoy::state::SafeGameInterface;
-use crate::apps::pusoy::play::finder::Finder;
-use crate::apps::pusoy::play::{Play};
-use crate::apps::pusoy::{get_expected_pass_count, Cards};
+use crate::cards::{Card, Cards};
+use crate::state::SafeGameInterface;
+use crate::play::finder::Finder;
+use crate::play::{Play, PlayKind};
+use crate::PUSOY_PASSING_MODEL_PATH;
 
 pub trait Player {
     fn choose_play(&self, game: SafeGameInterface) -> Play;
@@ -19,24 +22,37 @@ impl Player for HumanPlayer {
     fn choose_play(&self, game: SafeGameInterface) -> Play {
         loop {
             let your_hand = game.my_hand();
-            println!("your turn - {:?}", your_hand);
+
+            let all_valid_plays: Vec<_> = Finder::new(your_hand).all_plays().into_iter()
+                .filter(|&p| game.can_play_bool(p))
+                .collect();
+
+            println!("your cards - {:?}", your_hand);
+            println!("0: pass {}", if all_valid_plays.is_empty() { "(must pass)" } else { "" });
+            for (p, i) in all_valid_plays.iter().zip(1..) {
+                println!("{}: {:?} {:?}", i, p.cards(), p.kind());
+            }
+
             let mut cards_string = String::new();
             io::stdin().read_line(&mut cards_string).unwrap();
 
-            let cards: Cards = cards_string
-                .split_whitespace()
-                .map(|c| c.parse().unwrap())
-                .collect();
+            let cards =
+                match cards_string.trim().parse::<usize>() {
+                    Ok(0) => Cards::empty(),
+                    Ok(i) => all_valid_plays[i-1].cards(),
+                    Err(_) => {
+                        println!("invalid query {}", cards_string);
+                        continue
+                    },
+                };
 
-            // try to play these cards
             match game.can_play(cards) {
                 Ok(play) => {
                     // it worked
                     break play;
                 }
                 Err(e) => {
-                    eprintln!("invalid turn: {:?}", e);
-                    // we're gonna have to prompt the user again
+                    eprintln!("invalid turn: {:?}", e); // prompt again
                 }
             }
         }
@@ -67,7 +83,6 @@ pub fn best_play(game: SafeGameInterface) -> Play {
     let my_hand = game.my_hand();
     let plays_available = Finder::new(my_hand).all_plays();
 
-
     let potential_inserts = PotentialInserts::new(my_hand);
     let depth_left = my_hand.len();
 
@@ -88,9 +103,8 @@ fn cost_of_tail(
     memo: &mut VecMap<SearchState>,
 ) -> SearchState {
 
-    match memo.get(cards_used_so_far.get_digest()) {
-        Some(state) => return state.clone(), // we already have the best tail computed for this
-        None => {}, // we're gonna have to do this the old fasioned way
+    if let Some(&state) = memo.get(cards_used_so_far.get_digest()) {
+        return state; // we already have the best tail computed for this
     }
 
     if depth_left == 0 {
@@ -100,19 +114,17 @@ fn cost_of_tail(
     } else {
         let mut best_tail: Option<SearchState> = None;
 
-        for play in plays_available.iter() {
+        for &play in plays_available.iter() {
             let n_cards = play.cards().len();
 
             if depth_left < n_cards {
                 continue; 
             }
 
-            let mut plays_available_to_child = Vec::with_capacity(plays_available.len());
-            for p in plays_available.iter() {
-                if p.cards().is_disjoint(play.cards()) {
-                    plays_available_to_child.push(p.clone());
-                }
-            }
+            let plays_available_to_child: Vec<Play> = plays_available.iter()
+                .copied()
+                .filter(|p| p.cards().is_disjoint(play.cards()))
+                .collect();
 
             let mut child_state_keeper = cards_used_so_far.clone();
             child_state_keeper.add_cards(play.cards(), potential_inserts);
@@ -133,7 +145,7 @@ fn cost_of_tail(
 
 
 // describes the state of the game after a move has been played
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct SearchState {
     // this is the play that on our turn, we are looking to play on top of.
     // None if it is the first turn
@@ -142,7 +154,7 @@ pub struct SearchState {
     first_play: Option<Play>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 enum Status {
     FirstTurnOfGame,
     FirstAnalysis(Play), // previous term
@@ -150,8 +162,8 @@ enum Status {
 }
 
 impl Status {
-    fn is_first_turn(&self) -> bool {
-        match *self {
+    fn is_first_turn(self) -> bool {
+        match self {
             Status::Rest(_) => false,
             _ => true, 
         }
@@ -160,7 +172,7 @@ impl Status {
 
 impl<'a> SearchState {
     pub fn new(game_interface: SafeGameInterface) -> SearchState {
-        let status = match game_interface.get_play_on_table() {
+        let status = match game_interface.cards_on_table() {
             Some(play) => Status::FirstAnalysis(play.clone()),
             None => Status::FirstTurnOfGame,
         };
@@ -173,7 +185,7 @@ impl<'a> SearchState {
     }
 
     #[inline]
-    fn add_play(&mut self, play: &Play, game_interface: SafeGameInterface) {
+    fn add_play(&mut self, play: Play, game_interface: SafeGameInterface) {
         self.total_cost += match self.status {
             Status::FirstTurnOfGame => {
                 if play.cards().contains(Card::THREE_OF_CLUBS) {
@@ -182,7 +194,7 @@ impl<'a> SearchState {
                     INFINITY // this is always unplayable
                 }
             }
-            Status::FirstAnalysis(ref _before) => {
+            Status::FirstAnalysis(_before) => {
                 // we are trying to play directly on these cards
             
                 if game_interface.can_play_bool(play) {
@@ -193,7 +205,7 @@ impl<'a> SearchState {
                     get_expected_pass_count(_before, play)
                 }
             }
-            Status::Rest(ref _four_turns_before) => {
+            Status::Rest(_four_turns_before) => {
                 // TODO: include numbers from the research!
                 get_expected_pass_count(_four_turns_before, play)
 
@@ -201,9 +213,9 @@ impl<'a> SearchState {
         };
         // change the status going forward
         if self.status.is_first_turn() {
-            self.first_play = Some(play.clone());
+            self.first_play = Some(play);
         }
-        self.status = Status::Rest(play.clone()); 
+        self.status = Status::Rest(play);
     }
 
     #[inline]
@@ -264,6 +276,25 @@ impl CardsUsedSoFar {
     #[inline]
     fn get_digest(&self) -> usize {
         self.seen_so_far as usize // result always in 0..2^13
+    }
+}
+
+
+pub fn get_expected_pass_count(play1: Play, play2: Play) -> f64 {
+    lazy_static! {
+        static ref PASSING_MODEL: HashMap<((PlayKind, Card), (PlayKind, Card)), f64> = {
+            let reader = BufReader::new(File::open(PUSOY_PASSING_MODEL_PATH).unwrap());
+            bincode::deserialize_from(reader).unwrap()
+        };
+    }
+
+    fn classify(play: Play) -> (PlayKind, Card) {
+        (play.kind(), play.ranking_card().unwrap())
+    }
+
+    match PASSING_MODEL.get(&(classify(play1), classify(play2))) {
+        Some(&count) => count,
+        None => 3.0, // guess
     }
 }
 

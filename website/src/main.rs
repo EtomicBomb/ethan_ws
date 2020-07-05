@@ -8,12 +8,11 @@ use std::path::PathBuf;
 mod apps;
 use apps::*;
 
-const RESOURCES_PATH: &'static str = "/home/pi/Desktop/server/resources";
-const GOD_SET_PATH: &'static str = "/home/pi/Desktop/server/resources/apush/godset.txt";
-const VOCABULARY_LOG_PATH: &'static str = "/home/pi/Desktop/server/vocabularyLog.txt";
-const PASSWORD_LOG_PATH: &'static str = "/home/pi/Desktop/server/passwordLog.txt";
-const PUSOY_PASSING_MODEL_PATH: &'static str = "/home/pi/Desktop/server/passingModel.dat";
-const WORD_LIST_PATH: &'static str = "/home/pi/Desktop/server/wordList.txt";
+const RESOURCES_PATH: &str = "/home/pi/Desktop/server/resources";
+const GOD_SET_PATH: &str = "/home/pi/Desktop/server/resources/apush/godset.txt";
+const VOCABULARY_LOG_PATH: &str = "/home/pi/Desktop/server/vocabularyLog.txt";
+const PASSWORD_LOG_PATH: &str = "/home/pi/Desktop/server/passwordLog.txt";
+const WORD_LIST_PATH: &str = "/home/pi/Desktop/server/wordList.txt";
 
 const MAX_HTTP_REQUEST_SIZE: usize = 2048;
 const PERIOD_LENGTH: Duration = Duration::from_millis(100);

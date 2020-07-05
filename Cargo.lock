@@ -54,6 +54,7 @@ name = "cool_binary"
 version = "0.1.0"
 dependencies = [
  "json",
+ "pusoy",
 ]
 
 [[package]]
@@ -191,6 +192,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1502d12e458c49a4c9cbff560d0fe0060c252bc29799ed94ca2ed4bb665a0101"
 dependencies = [
  "unicode-xid",
+]
+
+[[package]]
+name = "pusoy"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "lazy_static",
+ "rand",
+ "serde",
+ "serde_derive",
+ "vec_map",
 ]
 
 [[package]]
@@ -341,12 +354,10 @@ version = "0.1.0"
 name = "website"
 version = "0.1.0"
 dependencies = [
- "bincode",
  "json",
  "lazy_static",
+ "pusoy",
  "rand",
- "serde",
  "server",
- "vec_map",
  "web_socket",
 ]
