@@ -8,7 +8,7 @@ use super::terms::{Terms, TermId};
 use std::str::{ParseBoolError};
 use std::option::NoneError;
 use std::num::ParseIntError;
-use json::{jsont, Json};
+use json::{json, Json};
 
 pub struct VocabularyModel {
     pub terms: Terms,
@@ -82,7 +82,7 @@ impl MultipleChoiceQuestion {
             .map(|&id| Json::String(vocabulary.terms[id].get_term().to_string()))
             .collect::<Vec<Json>>());
 
-        jsont!({definition: definition, terms: terms})
+        json!({definition: definition, terms: terms})
     }
 
     fn correct_term_id(&self) -> TermId {

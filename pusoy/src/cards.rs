@@ -5,10 +5,10 @@ use std::str::FromStr;
 
 use self::Rank::*;
 use self::Suit::*;
-use std::iter::FromIterator;
+use std::iter::{FromIterator, FusedIterator};
 
-/// Our type that represents a collection of cards.
-/// Implemented as a bitset
+/// Represents a collection of cards.
+/// Implemented as a bitset, with 3♣ as the least significant bit, in suit-major order
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct Cards {
     bits: u64,
@@ -17,7 +17,7 @@ pub struct Cards {
 impl Cards {
     pub const EMPTY: Cards = Cards::empty();
 
-    pub fn entire_deck() -> Cards {
+    pub const fn entire_deck() -> Cards {
         Cards { bits: (1 << 52) - 1 } // lower 52 bits all set to 1
     }
 
@@ -38,7 +38,7 @@ impl Cards {
     }
 
     pub fn remove(&mut self, card: Card) {
-        self.bits &= !(1 << card.get_index())
+        self.bits &= !(1 << card.get_index());
     }
 
     pub fn remove_all(&mut self, other: Cards) {
@@ -66,30 +66,35 @@ impl Cards {
     }
 
     pub fn all_same_rank(self) -> bool {
-        // TODO: is there an optimization, maybe one that involves a bitmask or something
-        if self.is_empty() {
-            true
-        } else {
-            let mut iter = self.iter();
-            let first_rank = iter.next().unwrap().rank();
-            iter.all(|c| c.rank() == first_rank)
-        }
+        let after = (self.bits.trailing_zeros() | 3) - 3; // round down to multiple of 4
+        let rank_cluster = self.bits >> after; // move our rank cluster to the lower 4 bits
+        rank_cluster < 16 // if they're all the same rank, then this should be the only rank cluster
     }
 
+    #[inline]
     pub fn all_same_suit(self) -> bool {
-        if self.is_empty() {
-            true
-        } else {
-            let mut iter = self.iter();
-            let first_suit = iter.next().unwrap().suit();
-            iter.all(|c| c.suit() == first_suit)
-        }
+        const CLUBS_MASK:    u64 = 0b_1110_1110_1110_1110_1110_1110_1110_1110_1110_1110_1110_1110_1110;
+        const SPADES_MASK:   u64 = 0b_1101_1101_1101_1101_1101_1101_1101_1101_1101_1101_1101_1101_1101;
+        const HEARTS_MASK:   u64 = 0b_1011_1011_1011_1011_1011_1011_1011_1011_1011_1011_1011_1011_1011;
+        const DIAMONDS_MASK: u64 = 0b_0111_0111_0111_0111_0111_0111_0111_0111_0111_0111_0111_0111_0111;
+
+        self.bits & CLUBS_MASK == 0 // is it a club flush?
+            || self.bits & SPADES_MASK == 0 // is it a spade flush?
+            || self.bits & HEARTS_MASK == 0 // etc.
+            || self.bits & DIAMONDS_MASK == 0
     }
 
     pub fn max_card(self) -> Option<Card> {
         match self.bits.leading_zeros() {
             64 => None,
-            n => Some(Card { inner: 63 - n as u8 })
+            n => Some(Card { inner: 63 - n as u8 }),
+        }
+    }
+
+    fn min_card(self) -> Option<Card> {
+        match self.bits.trailing_zeros() {
+            64 => None,
+            n => Some(Card { inner: n as u8 })
         }
     }
 
@@ -102,57 +107,18 @@ impl Cards {
     }
 }
 
-#[derive(Copy, Clone)]
-pub struct CardsIter {
-    bits: u64, // invariant: bits.trailing_zeros() == 0
-    index: u8,
-}
-
-impl CardsIter {
-    fn new(cards: Cards) -> CardsIter {
-        let trailing_zeros = cards.bits.trailing_zeros() as u8;
-
-        CardsIter {
-            bits: cards.bits.checked_shr(trailing_zeros as u32).unwrap_or(0),
-            index: trailing_zeros,
-        }
-    }
-}
-
-impl Iterator for CardsIter {
-    type Item = Card;
-
-    fn next(&mut self) -> Option<Card> {
-        if self.bits == 0 {
-            None
-        } else if self.bits == 1 {
-            self.bits = 0;
-            Some(Card { inner: self.index })
-        } else {
-            let ret = Some(Card { inner: self.index });
-
-            let trailing_zeros = (self.bits >> 1).trailing_zeros() as u8 + 1;
-            self.bits >>= trailing_zeros;
-            self.index += trailing_zeros;
-
-            ret
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let len = self.count();
-        (len, Some(len))
-    }
-
-    fn count(self) -> usize {
-        self.bits.count_ones() as usize
-    }
-}
-
-
 impl fmt::Debug for Cards {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self.cards_vec())
+    }
+}
+
+impl IntoIterator for Cards {
+    type Item = Card;
+    type IntoIter = CardsIter;
+
+    fn into_iter(self) -> CardsIter {
+        self.iter()
     }
 }
 
@@ -171,6 +137,47 @@ impl Extend<Card> for Cards {
         }
     }
 }
+
+#[derive(Copy, Clone)]
+pub struct CardsIter {
+    inner: Cards,
+}
+
+impl CardsIter {
+    fn new(cards: Cards) -> CardsIter {
+        CardsIter { inner: cards }
+    }
+}
+
+impl Iterator for CardsIter {
+    type Item = Card;
+
+    fn next(&mut self) -> Option<Card> {
+        self.inner.min_card()
+            .map(|c| {
+                self.inner.remove(c);
+                c
+            })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+
+    fn count(self) -> usize {
+        self.len()
+    }
+}
+
+impl ExactSizeIterator for CardsIter {
+    fn len(&self) -> usize {
+        self.inner.len()
+    }
+}
+
+impl FusedIterator for CardsIter {}
+
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 pub struct Card {
@@ -217,7 +224,7 @@ impl FromStr for Card {
 
     fn from_str(s: &str) -> Result<Card, ()> {
         let rank = s.get(0..1).ok_or(())?.parse()?;
-        let suit = s.get(1..2).ok_or(())?.parse()?;
+        let suit = s.get(1..).ok_or(())?.parse()?;
 
         Ok(Card::new(rank, suit))
     }

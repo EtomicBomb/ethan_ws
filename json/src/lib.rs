@@ -1,40 +1,38 @@
-pub mod json;
-
-pub use json::Json;
+mod encode;
+pub use encode::Json;
 
 #[macro_export]
 macro_rules! jsons {
-    ($e:tt) => { jsont!($e).to_string() }
+    ($e:tt) => { json!($e).to_string() }
 }
 
 #[macro_export]
-macro_rules! jsont {
+macro_rules! json {
     (null) => { json::Json::Null };
 
     ([$($e:tt),*]) => {
         json::Json::Array(vec![
             $(
-            json::jsont!($e),
+            json::json!($e),
             )*
         ])
     };
 
-    ([$($e:tt,)*]) => { jsont!([$($e),*]) };
+    ([$($e:tt,)*]) => { json!([$($e),*]) };
 
     ({$($name:ident: $e:tt),*}) => {{
         let mut map = std::collections::HashMap::new();
 
         $(
-        map.insert(stringify!($name).into(), json::jsont!($e));
+        map.insert(stringify!($name).into(), json::json!($e));
         )*
 
         json::Json::Object(map)
     }};
 
-    ({$($name:ident: $e:tt,)*}) => { json::jsont!({$($name: $e),*}) };
+    ({$($name:ident: $e:tt,)*}) => { json::json!({$($name: $e),*}) };
 
     ($e:expr) => { json::Jsonable::into_json($e) };
-
 }
 
 pub trait Jsonable {

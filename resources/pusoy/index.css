@@ -1,7 +1,63 @@
-#joinGame {
+body {
+    background-color: #1fbb75;
+}
+
+#joinGameScreen {
     display: none;
 }
 
-#lobby {
+#lobbyScreen {
     display: none;
+}
+
+#gameScreen {
+    display: none;
+    grid-template-columns: 1fr 2fr 1fr;
+    grid-template-rows: 1fr 2fr 1fr;
+}
+
+
+#gameOverLabel {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+
+#onTable {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    flex-direction: row;
+}
+
+#upCards {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+#downCards {
+    grid-column: 2;
+    grid-row: 3;
+    display: flex;
+    flex-direction: row;
+}
+
+#submitButton {
+    grid-column: 3;
+    grid-row: 3;
+}
+
+#leftCards {
+    grid-column: 1;
+    grid-row: 2; 
+}
+
+#rightCards {
+    grid-column: 3;
+    grid-row: 2;
+}
+
+#tableCards {
+    grid-column: 2;
+    grid-row: 2;
 }

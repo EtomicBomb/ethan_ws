@@ -2,7 +2,7 @@ use crate::apps::history::{GameSpecific, Users};
 use crate::apps::history::vocabulary_model::{VocabularyModel, Query, MultipleChoiceQuestion};
 
 use server::{PeerId, Disconnect};
-use json::{Json, jsons, jsont};
+use json::{Json, jsons, json};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
@@ -35,7 +35,7 @@ impl QuizGame {
             .map(|id| {
                 let username = users.get_username(*id).to_string();
                 let score = *self.scores.get(id).unwrap_or(&0.0);
-                jsont!({username: username, score: score})
+                json!({username: username, score: score})
             })
             .collect())
     }

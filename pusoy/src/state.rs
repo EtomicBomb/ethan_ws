@@ -1,28 +1,26 @@
-use crate::play::Play;
-use crate::cards::{Card};
+use crate::Play;
+use crate::all_plays;
+use crate::cards::{Card, Cards};
 use rand::{thread_rng, Rng};
-use crate::Cards;
 
 // MOTIVATION: if HumanPlayer or MachinePlayer had access to the regular GameState object,
 // they could call .hands and other info that would just be cheating. This struct only gives
 // access to data that isn't cheating
 #[derive(Clone, Copy)]
 pub struct SafeGameInterface<'a> {
-    pub inner: &'a GameState,
+    inner: &'a GameState,
 }
 
 impl<'a> SafeGameInterface<'a> {
-    pub fn from_game(game: &'a GameState) -> SafeGameInterface<'a> {
-        SafeGameInterface { inner: game }
-    }
-
-    pub fn can_play(&self, cards: Cards) -> Result<Play, GameError> {
-        self.inner.can_play(cards)
+    pub fn valid_plays(&self) -> Vec<Play> {
+        all_plays(self.my_hand()).into_iter()
+            .filter(|&p| self.can_play(p).is_ok())
+            .collect()
     }
 
     #[inline]
-    pub fn can_play_bool(&self, play: Play) -> bool {
-        self.inner.can_play_bool(play)
+    pub fn can_play(&self, play: Play) -> Result<(), GameError> {
+        self.inner.can_play(play)
     }
 
     pub fn my_hand(&self) -> Cards {
@@ -38,7 +36,7 @@ impl<'a> SafeGameInterface<'a> {
 #[derive(Debug)]
 pub struct GameState {
     hands: Vec<Cards>,
-    pub current_player: usize,
+    current_player: usize,
     cards_on_table: Option<Play>,
     turn_index: usize, // need to store because on first turn, must play a hand with three of clubs
     last_player_to_not_pass: usize,
@@ -70,67 +68,31 @@ impl GameState {
         }
     }
 
-    #[inline]
-    pub fn can_play_bool(&self, play: Play) -> bool {
-        // make sure we have all the cards in that play
-        if !self.my_hand().is_superset_of(play.cards()) {
-            return false;
-        }
-
-        if self.is_first_turn() {
-            if !play.cards().contains(Card::THREE_OF_CLUBS) {
-                // the only requirement on the first move is that they play the three of clubs somehow
-                return false;
-            }
-        } else if self.has_control() {
-            // if we have control, we can pretty much do anything except passing
-            if play.is_pass() {
-                return false;
-            }
-        } else if !play.is_pass() {
-            // here, we have our standard conditions, where we are not passing, and we don't have control
-
-            // since we don't have control, we have to make sure they are making a valid play in the context
-            // of the cards that they are trying to play on.
-            let cards_down = self.cards_on_table.as_ref().unwrap();
-
-            // this is the problem
-            if !play.len_eq(cards_down) {
-                return false;
-            }
-
-            if !play.can_play_on(cards_down) {
-                return false;
-            }
-        } // we don't have to list out the condition where we don't have control are passing, because this is always legal
-
-        true
+    pub fn get_interface(&self) -> SafeGameInterface {
+        SafeGameInterface { inner: self }
     }
 
-    pub fn can_play(&self, cards: Cards) -> Result<Play, GameError> {
-        let play = Play::infer_from_cards(cards).ok_or(GameError::PlayDoesntExist)?;
-
+    #[inline]
+    pub fn can_play(&self, play: Play) -> Result<(), GameError> {
         if !self.my_hand().is_superset_of(play.cards()) {
             return Err(GameError::DontHaveCard);
         }
 
-        // make sure the move we are trying to do is legal
         if self.is_first_turn() {
             if !play.cards().contains(Card::THREE_OF_CLUBS) {
-                // the only requirement on the first move is that they play the three of clubs somehow
                 return Err(GameError::IsntPlayingThreeOfClubs);
             }
         } else if self.has_control() {
             // if we have control, we can pretty much do anything except passing
             if play.is_pass() {
-                return Err(GameError::CannotPass);
+                return Err(GameError::MustPlayOnPass);
             }
         } else if !play.is_pass() {
             // here, we have our standard conditions, where we are not passing, and we don't have control
 
             // since we don't have control, we have to make sure they are making a valid play in the context
             // of the cards that they are trying to play on.
-            let cards_down = self.cards_on_table.as_ref().unwrap();
+            let cards_down = self.cards_on_table.unwrap();
 
             // this is the problem
             if !play.len_eq(cards_down) {
@@ -142,12 +104,12 @@ impl GameState {
             }
         } // we don't have to list out the condition where we don't have control are passing, because this is always legal
 
-
-        Ok(play)
+        Ok(())
     }
 
     pub fn play(&mut self, play: Play) {
         // assumes that play is_legal
+        self.can_play(play).unwrap(); // TODO: handle properly
 
         self.hands[self.current_player].remove_all(play.cards());
 
@@ -185,6 +147,8 @@ impl GameState {
         &self.hands
     }
 
+    pub fn current_player(&self) -> usize { self.current_player }
+
     pub fn is_first_turn(&self) -> bool {
         self.turn_index == 0
     }
@@ -196,7 +160,7 @@ pub enum GameError {
     IsntPlayingThreeOfClubs,
     TooLow,
     WrongLength,
-    CannotPass,
+    MustPlayOnPass,
     PlayDoesntExist,
 }
 

@@ -1,7 +1,7 @@
 use server::{PeerId, Disconnect, GlobalState};
 use std::collections::HashMap;
 use web_socket::{WebSocketMessage, WebSocketWriter};
-use json::{jsont, Json};
+use json::{json, Json};
 use rand::{random, thread_rng, Rng};
 use std::str::FromStr;
 
@@ -65,14 +65,14 @@ impl Player {
     fn new(writer: WebSocketWriter) -> Player {
         Player {
             writer,
-            color: jsont!({r: (random::<u8>()), g:(random::<u8>()), b:(random::<u8>())}),
+            color: json!({r: (random::<u8>()), g:(random::<u8>()), b:(random::<u8>())}),
             x: thread_rng().gen_range(0.0, MAP_WIDTH),
             y: thread_rng().gen_range(0.0, MAP_HEIGHT),
         }
     }
 
     fn as_json(&self) -> Json {
-        jsont!({
+        json!({
             x: (self.x),
             y: (self.y),
             color: (self.color.clone()),

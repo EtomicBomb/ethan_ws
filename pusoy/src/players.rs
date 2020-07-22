@@ -8,91 +8,71 @@ use std::collections::HashMap;
 
 use crate::cards::{Card, Cards};
 use crate::state::SafeGameInterface;
-use crate::play::finder::Finder;
 use crate::play::{Play, PlayKind};
-use crate::PUSOY_PASSING_MODEL_PATH;
+use crate::{PUSOY_PASSING_MODEL_PATH, all_plays};
+use rand::{thread_rng, Rng};
 
 pub trait Player {
-    fn choose_play(&self, game: SafeGameInterface) -> Play;
+    fn choose_play(&self, valid_plays: &[Play], game: SafeGameInterface) -> usize;
 }
 
 pub struct HumanPlayer;
 
 impl Player for HumanPlayer {
-    fn choose_play(&self, game: SafeGameInterface) -> Play {
+    fn choose_play(&self, valid_plays: &[Play], game: SafeGameInterface) -> usize {
         loop {
             let your_hand = game.my_hand();
 
-            let all_valid_plays: Vec<_> = Finder::new(your_hand).all_plays().into_iter()
-                .filter(|&p| game.can_play_bool(p))
-                .collect();
-
             println!("your cards - {:?}", your_hand);
-            println!("0: pass {}", if all_valid_plays.is_empty() { "(must pass)" } else { "" });
-            for (p, i) in all_valid_plays.iter().zip(1..) {
+            for (i, p) in valid_plays.iter().enumerate() {
                 println!("{}: {:?} {:?}", i, p.cards(), p.kind());
             }
 
             let mut cards_string = String::new();
             io::stdin().read_line(&mut cards_string).unwrap();
 
-            let cards =
-                match cards_string.trim().parse::<usize>() {
-                    Ok(0) => Cards::empty(),
-                    Ok(i) => all_valid_plays[i-1].cards(),
-                    Err(_) => {
-                        println!("invalid query {}", cards_string);
-                        continue
-                    },
-                };
-
-            match game.can_play(cards) {
-                Ok(play) => {
-                    // it worked
-                    break play;
-                }
-                Err(e) => {
-                    eprintln!("invalid turn: {:?}", e); // prompt again
+            match cards_string.trim().parse::<usize>() {
+                Ok(i) => break i,
+                Err(_) => {
+                    eprintln!("invalid query {}", cards_string);
+                    continue
                 }
             }
         }
+    }
+}
+
+pub struct RandomPlayer;
+impl Player for RandomPlayer {
+    fn choose_play(&self, valid_plays: &[Play], _game: SafeGameInterface) -> usize {
+        thread_rng().gen_range(0, valid_plays.len())
     }
 }
 
 pub struct MachinePlayer;
 
 impl Player for MachinePlayer {
-    fn choose_play(&self, game: SafeGameInterface) -> Play {
+    fn choose_play(&self, valid_plays: &[Play], game: SafeGameInterface) -> usize {
+        let my_hand = game.my_hand();
 
-        let desired_play = best_play(game);
+        let potential_inserts = PotentialInserts::new(my_hand);
+        let depth_left = my_hand.len();
 
-        match game.can_play(desired_play.cards()) {
-            Ok(play) => play,
-            Err(_) => {
-                // we're gonna have to pass here
-                match game.can_play(Cards::empty()) {
-                    Ok(pass) => pass,
-                    Err(e) => unreachable!("{:?}", e),
-                }
-            }
-        }
+        let mut memo = VecMap::with_capacity(MEMO_TABLE_CAPACITIES[depth_left-1]);
+        let cards_used_so_far = CardsUsedSoFar::new();
+
+        let all_plays_no_pass = all_plays(my_hand).into_iter()
+            .filter(|p| !p.is_pass())
+            .collect();
+
+        let result = cost_of_tail(all_plays_no_pass, depth_left, &potential_inserts, game, cards_used_so_far, &mut memo);
+
+        valid_plays.iter().enumerate()
+            .find(|&(_, &p)| p == result.first_play())
+            .map(|(i, _)| i)
+            .unwrap_or(0) // is zero
     }
 }
-
-pub fn best_play(game: SafeGameInterface) -> Play {
-    let my_hand = game.my_hand();
-    let plays_available = Finder::new(my_hand).all_plays();
-
-    let potential_inserts = PotentialInserts::new(my_hand);
-    let depth_left = my_hand.len();
-
-    let mut memo = VecMap::with_capacity(MEMO_TABLE_CAPACITIES[depth_left-1]);
-    let cards_used_so_far = CardsUsedSoFar::new();
-
-    let result = cost_of_tail(plays_available, depth_left, &potential_inserts, game, cards_used_so_far, &mut memo);
-
-    result.first_play()
-} 
 
 fn cost_of_tail(
     plays_available: Vec<Play>,
@@ -197,7 +177,7 @@ impl<'a> SearchState {
             Status::FirstAnalysis(_before) => {
                 // we are trying to play directly on these cards
             
-                if game_interface.can_play_bool(play) {
+                if game_interface.can_play(play).is_ok() {
                     1.0
                 } else {
                     // how many turns do we think it will take

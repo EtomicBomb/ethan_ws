@@ -8,24 +8,34 @@
 </head>
 
 <body>
-
-    <div id="landing">
-        <h1>Pusoy</h1>
+    <div id="landingScreen">
+        <h1>pusoy</h1>
         <input type="text" id="username" placeholder="enter a username" autocomplete="off">
         <button id="startGameButton">start a Game</button>
         <button id="joinGameButton">join a Game</button>
     </div>
 
-    <div id="joinGame"> 
+    <div id="joinGameScreen"> 
         <input id="gameIdInput" placeholder="enter the game id" autocomplete="off">
         <button id="submitGameId">join</button>
     </div>
 
-    <div id="lobby">
-        <h1 id="hostLabel"></p>
+    <div id="lobbyScreen">
+        <h1 id="hostLabel"></h1>
         <h2 id="gameIdLabel"></h2>
         <textarea id="playerList" autocomplete="off" readonly></textarea>
         <button id="begin">begin</button>
+    </div>
+
+    <div id="gameScreen">
+        <h1 hidden id="gameOverLabel">game over</h1>
+        <div id="upCards"></div>
+        <div id="downCards"></div>
+        <button id="submitButton">play</button>
+        <div id="leftCards"></div>
+        <div id="rightCards"></div>
+
+        <div id="onTable"></div>
     </div>
 
     <script src="/pusoy/index.js"></script>

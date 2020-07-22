@@ -4,7 +4,7 @@ use rand::distributions::{Distribution, Standard};
 use std::collections::{HashSet, HashMap};
 
 use web_socket::{WebSocketMessage, WebSocketWriter};
-use json::{Json, jsont, jsons};
+use json::{Json, json, jsons};
 
 use server::{PeerId, GlobalState, Disconnect};
 
@@ -129,11 +129,11 @@ impl GameState {
 
     pub fn jsonify(&self) -> String {
         let left_territory = self.left_territory.iter()
-            .map(|&(x, y)| jsont!({x: (x as f64), y: (y as f64)}))
+            .map(|&(x, y)| json!({x: (x as f64), y: (y as f64)}))
             .collect();
 
         let right_territory = self.right_territory.iter()
-            .map(|&(x, y)| jsont!({x: (x as f64), y: (y as f64)}))
+            .map(|&(x, y)| json!({x: (x as f64), y: (y as f64)}))
             .collect();
 
         let available_colors = Json::Array(self.valid_colors().iter().map(|c| c.jsonify()).collect());
@@ -181,7 +181,7 @@ impl GameState {
             for &(around_x, around_y) in [(x, y.wrapping_sub(1)), (x, y + 1), (x.wrapping_sub(1), y), (x + 1, y)].iter() {
                 if let Some(color) = self.field.get(around_x, around_y) {
                     if color != self.left_color() && color != self.right_color() {
-                        squares.push(jsont!({x:around_x,y:around_y}));
+                        squares.push(json!({x:around_x,y:around_y}));
                     }
                 }
             }

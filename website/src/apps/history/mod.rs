@@ -2,7 +2,7 @@ use server::{GlobalState, PeerId, Disconnect};
 use web_socket::{WebSocketMessage, WebSocketWriter};
 use std::collections::{HashMap, HashSet};
 
-use json::{Json, jsons, jsont};
+use json::{Json, jsons, json};
 use std::str::FromStr;
 use std::option::NoneError;
 use std::fmt;

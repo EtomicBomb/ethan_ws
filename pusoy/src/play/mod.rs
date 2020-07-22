@@ -1,11 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-pub mod finder;
-use finder::Finder;
+mod finder;
+
+pub use finder::all_plays;
 
 use crate::cards::Card;
 use std::cmp::Ordering;
 use crate::Cards;
+use std::fmt;
 
 
 #[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Debug, Hash, Deserialize, Serialize)]
@@ -19,6 +21,21 @@ pub enum PlayKind {
     FullHouse = 5,
     FourOfAKind = 6,
     StraitFlush = 7,
+}
+
+impl fmt::Display for PlayKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match *self {
+            PlayKind::Pass => "pass",
+            PlayKind::Single => "single",
+            PlayKind::Pair => "pair",
+            PlayKind::Strait => "strait",
+            PlayKind::Flush => "flush",
+            PlayKind::FullHouse => "full house",
+            PlayKind::FourOfAKind => "four of a kind",
+            PlayKind::StraitFlush => "strait flush",
+        })
+    }
 }
 
 impl PlayKind {
@@ -76,23 +93,18 @@ impl Play {
             ranking_card: Some(ranking_card),
         }
     }
-
-    pub fn infer_from_cards(cards: Cards) -> Option<Play> {
-        Finder::new(cards).infer()
-    }
-
     #[inline]
-    pub fn is_pass(&self) -> bool {
+    pub fn is_pass(self) -> bool {
         self.kind == PlayKind::Pass
     }
 
     #[inline]
-    pub fn len_eq(&self, other: &Play) -> bool {
+    pub fn len_eq(self, other: Play) -> bool {
         self.kind.len() == other.kind.len()
     }
 
     #[inline]
-    pub fn can_play_on(&self, other: &Play) -> bool {
+    pub fn can_play_on(self, other: Play) -> bool {
         if self.is_pass() { return true }
 
         if self.kind.len() != other.kind.len() {
@@ -105,28 +117,30 @@ impl Play {
     }
 
     #[inline]
-    pub fn doesnt_contain(&self, card: Card) -> bool {
+    pub fn doesnt_contain(self, card: Card) -> bool {
         !self.cards.contains(card)
     }
 
 
-    pub fn kind(&self) -> PlayKind {
+    pub fn kind(self) -> PlayKind {
         self.kind
     }
 
     #[inline]
-    pub fn ranking_card(&self) -> Option<Card> {
+    pub fn ranking_card(self) -> Option<Card> {
         self.ranking_card
     }
 
 
     #[inline]
-    pub fn cards(&self) -> Cards {
+    pub fn cards(self) -> Cards {
         self.cards
     }
 
-    pub fn replace_kind(&mut self, kind: PlayKind) {
+    pub fn with_kind(mut self, kind: PlayKind) -> Play {
         self.kind = kind;
+        self
     }
+
 }
 

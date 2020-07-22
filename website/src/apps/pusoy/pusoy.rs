@@ -4,9 +4,8 @@ use server::{GlobalState, PeerId, Disconnect};
 use web_socket::{WebSocketWriter, WebSocketMessage};
 use std::fmt::Debug;
 use std::collections::HashMap;
-use json::{Json, jsons, jsont};
+use json::{Json, jsons, json};
 use std::io::{BufReader};
-use pusoy::{Play, PlayKind};
 use std::fs::{File};
 use std::iter::once;
 use lazy_static::lazy_static;
@@ -54,7 +53,7 @@ impl PusoyGlobalState {
     }
 
     fn lobby_from_id(&mut self, json: &Json) -> Option<GameId> {
-        let game_id = GameId::from_json(json)?;
+        let game_id = GameId::from_word(json.get_string()?)?;
 
         if self.lobbies.contains_key(&game_id) {
             Some(game_id)
@@ -209,22 +208,17 @@ impl Lobby {
     }
 
     fn announce_players(&mut self) {
-        let string = jsons!({
+        self.send_to_all(&jsons!({
             kind: "refreshLobby",
             players: (Json::Array(self.players.iter().map(|u| Json::String(u.username.clone())).collect())),
-        });
-
-        self.send_to_all(&string);
+        }));
     }
 
     fn announce_beginning(&mut self) {
-        let string = jsons!({
-            kind: "beginGame",
-            host: (self.host.username.clone()),
-            users: (Json::Array(self.players.iter().map(|p| Json::String(p.username.clone())).collect())),
-        });
-
-        self.send_to_all(&string);
+        self.send_to_all(&jsons!({
+            kind: "begin",
+            players: (Json::Array(self.players.iter().chain(Some(&self.host)).map(|p| Json::String(p.username.clone())).collect())),
+        }));
     }
 
     fn send_to_all(&mut self, string: &str) {
@@ -246,7 +240,11 @@ impl Member {
         Member { id, writer, username }
     }
 
-    fn write_ignore(&mut self, string: &str) {
+    pub fn get_id(&self) -> PeerId {
+        self.id
+    }
+
+    pub fn write_ignore(&mut self, string: &str) {
         let _ = self.writer.write_string(string);
     }
 }
@@ -257,9 +255,7 @@ struct GameId {
 }
 
 impl GameId {
-    fn from_json(json: &Json) -> Option<GameId> {
-        let word: &str = json.get_string()?;
-
+    fn from_word(word: &str) -> Option<GameId> {
         WORD_LIST.binary_search_by(|probe| probe.as_str().cmp(word)).ok()
             .map(|word_index| GameId { word_index })
     }
